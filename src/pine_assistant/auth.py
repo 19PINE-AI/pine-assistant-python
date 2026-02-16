@@ -6,8 +6,8 @@ Two-step email verification. No reCAPTCHA required.
 
 from typing import Any
 
-from pine_ai.transport.http import HttpClient
-from pine_ai.errors import AuthError
+from pine_assistant.transport.http import HttpClient
+from pine_assistant.errors import AuthError
 
 
 class Auth:

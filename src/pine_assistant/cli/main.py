@@ -17,9 +17,9 @@ try:
     import click
     from rich.console import Console
 except ImportError:
-    raise SystemExit("CLI requires extras: pip install pine-ai[cli]")
+    raise SystemExit("CLI requires extras: pip install pine-assistant[cli]")
 
-from pine_ai.client import AsyncPineAI
+from pine_assistant.client import AsyncPineAI
 
 console = Console()
 CONFIG_FILE = Path.home() / ".pine" / "config.json"
@@ -60,10 +60,10 @@ def main():
 
 
 # Register subcommands from separate modules
-from pine_ai.cli.auth import auth
-from pine_ai.cli.chat import chat_cmd, send_cmd
-from pine_ai.cli.sessions import sessions
-from pine_ai.cli.tasks import task
+from pine_assistant.cli.auth import auth
+from pine_assistant.cli.chat import chat_cmd, send_cmd
+from pine_assistant.cli.sessions import sessions
+from pine_assistant.cli.tasks import task
 
 main.add_command(auth)
 main.add_command(chat_cmd)

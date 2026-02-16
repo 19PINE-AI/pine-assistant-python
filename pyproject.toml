@@ -3,14 +3,14 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "pine-ai"
+name = "pine-assistant"
 version = "0.1.0"
 description = "Pine AI SDK — Let Pine AI handle your digital chores. Socket.IO + REST client."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 authors = [{name = "Pine AI"}]
-keywords = ["pine-ai", "pine", "ai", "customer-service", "sdk", "socketio"]
+keywords = ["pine-assistant", "pine", "ai", "customer-service", "sdk", "socketio"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -39,10 +39,10 @@ Repository = "https://github.com/pineai/pine-python"
 Issues = "https://github.com/pineai/pine-python/issues"
 
 [project.scripts]
-pine = "pine_ai.cli.main:main"
+pine = "pine_assistant.cli.main:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-pine_ai = ["py.typed"]
+pine_assistant = ["py.typed"]

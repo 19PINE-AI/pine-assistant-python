@@ -1,4 +1,4 @@
-# Releasing pine-ai (Python)
+# Releasing pine-assistant (Python)
 
 This package uses **PyPI trusted publishing** (OIDC) — no PyPI tokens are stored in GitHub.
 
@@ -6,7 +6,7 @@ This package uses **PyPI trusted publishing** (OIDC) — no PyPI tokens are stor
 
 ### Register the trusted publisher on PyPI
 
-1. Go to <https://pypi.org/manage/project/pine-ai/settings/publishing/> (or add a **pending publisher** at <https://pypi.org/manage/account/publishing/> if the project doesn't exist on PyPI yet).
+1. Go to <https://pypi.org/manage/project/pine-assistant/settings/publishing/> (or add a **pending publisher** at <https://pypi.org/manage/account/publishing/> if the project doesn't exist on PyPI yet).
 2. Under **Add a new publisher**, fill in:
    - **Owner:** `pineai`
    - **Repository:** `pine-python`
@@ -22,7 +22,7 @@ It installs, imports, builds, and verifies the package across Python 3.10 – 3.
 
 1. Bump the version in **both** places:
    - `pyproject.toml` → `version = "X.Y.Z"`
-   - `src/pine_ai/__init__.py` → `__version__ = "X.Y.Z"`
+   - `src/pine_assistant/__init__.py` → `__version__ = "X.Y.Z"`
 2. Commit, tag, and push:
    ```bash
    git add -A && git commit -m "release: vX.Y.Z"

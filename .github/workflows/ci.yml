@@ -30,7 +30,7 @@ jobs:
         run: pip install .
 
       - name: Verify import
-        run: python -c "from pine_ai import PineAI, AsyncPineAI, __version__; print(f'pine-ai {__version__} OK')"
+        run: python -c "from pine_assistant import PineAI, AsyncPineAI, __version__; print(f'pine-assistant {__version__} OK')"
 
       - name: Run tests
         run: pip install pytest pytest-asyncio && pytest tests/ -v --ignore=tests/integration || echo "No unit tests yet"

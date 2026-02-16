@@ -125,7 +125,7 @@ class SocketIOManager:
             self._joined_sessions.add(session_id)
         if event_type == "session:leave" and session_id:
             self._joined_sessions.discard(session_id)
-        from pine_ai.transport.envelope import build_envelope
+        from pine_assistant.transport.envelope import build_envelope
         envelope = build_envelope(
             event_type, data,
             user_id=self._user_id,
@@ -139,7 +139,7 @@ class SocketIOManager:
                 await self._sio.emit(event_type, envelope)  # type: ignore[union-attr]
             except Exception as e:
                 import logging
-                logging.getLogger("pine_ai.transport.socketio").error(f"Emit failed for {event_type}: {e}")
+                logging.getLogger("pine_assistant.transport.socketio").error(f"Emit failed for {event_type}: {e}")
 
         try:
             loop = asyncio.get_running_loop()
@@ -157,7 +157,7 @@ class SocketIOManager:
         """Emit and wait for a response event with matching session_id."""
         if not self._sio or not self._sio.connected:
             raise RuntimeError("Socket.IO not connected")
-        from pine_ai.transport.envelope import build_envelope
+        from pine_assistant.transport.envelope import build_envelope
         request_id = str(uuid.uuid4())
         envelope = build_envelope(
             event_type, data,

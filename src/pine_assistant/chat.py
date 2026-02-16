@@ -11,8 +11,8 @@ import asyncio
 import time
 from typing import Any, AsyncGenerator, Callable, Coroutine, Optional
 
-from pine_ai.models.events import C2SEvent, S2CEvent
-from pine_ai.transport.socketio import SocketIOManager
+from pine_assistant.models.events import C2SEvent, S2CEvent
+from pine_assistant.transport.socketio import SocketIOManager
 
 TERMINAL_STATES = {"task_finished", "task_cancelled", "task_stale"}
 DEFAULT_IDLE_TIMEOUT_S = 120.0

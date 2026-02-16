@@ -13,7 +13,7 @@ import os
 import pytest
 import pytest_asyncio
 
-from pine_ai import AsyncPineAI, S2CEvent
+from pine_assistant import AsyncPineAI, S2CEvent
 
 SKIP = not os.environ.get("PINE_INTEGRATION")
 ACCESS_TOKEN = os.environ.get("PINE_ACCESS_TOKEN", "")

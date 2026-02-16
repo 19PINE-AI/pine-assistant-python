@@ -7,13 +7,13 @@ import uuid
 from pathlib import Path
 from typing import Any, AsyncGenerator, Generator, Optional
 
-from pine_ai.transport.http import HttpClient, DEFAULT_BASE_URL
-from pine_ai.transport.socketio import SocketIOManager
-from pine_ai.auth import Auth
-from pine_ai.sessions import SessionsAPI
-from pine_ai.chat import ChatEngine, ChatEvent
-from pine_ai.errors import ConnectionError
-from pine_ai.models.events import C2SEvent
+from pine_assistant.transport.http import HttpClient, DEFAULT_BASE_URL
+from pine_assistant.transport.socketio import SocketIOManager
+from pine_assistant.auth import Auth
+from pine_assistant.sessions import SessionsAPI
+from pine_assistant.chat import ChatEngine, ChatEvent
+from pine_assistant.errors import ConnectionError
+from pine_assistant.models.events import C2SEvent
 
 DEVICE_ID_FILE = Path.home() / ".pine" / "device_id"
 

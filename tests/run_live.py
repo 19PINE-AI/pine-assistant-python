@@ -7,7 +7,7 @@ import sys
 # Add src to path for development
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from pine_ai import AsyncPineAI, S2CEvent
+from pine_assistant import AsyncPineAI, S2CEvent
 
 ACCESS_TOKEN = os.environ.get("PINE_ACCESS_TOKEN", "")
 USER_ID = os.environ.get("PINE_USER_ID", "")

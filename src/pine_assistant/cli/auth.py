@@ -5,23 +5,23 @@ from typing import Optional
 import click
 from rich.console import Console
 
-from pine_ai.client import AsyncPineAI
+from pine_assistant.client import AsyncPineAI
 
 console = Console()
 
 
 def _load_config() -> dict:
-    from pine_ai.cli.main import _load_config
+    from pine_assistant.cli.main import _load_config
     return _load_config()
 
 
 def _save_config(cfg: dict) -> None:
-    from pine_ai.cli.main import _save_config
+    from pine_assistant.cli.main import _save_config
     _save_config(cfg)
 
 
 def _run(coro):
-    from pine_ai.cli.main import _run
+    from pine_assistant.cli.main import _run
     return _run(coro)
 
 

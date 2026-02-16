@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from pine_ai.transport.http import HttpClient
+from pine_assistant.transport.http import HttpClient
 
 
 class SessionsAPI:

@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from pine_ai.models.envelope import MessageEnvelope, MessageMetadata, SessionMessagePayload, UserSource
+from pine_assistant.models.envelope import MessageEnvelope, MessageMetadata, SessionMessagePayload, UserSource
 
 
 def build_envelope(

@@ -7,12 +7,12 @@ console = Console()
 
 
 def _get_client():
-    from pine_ai.cli.main import _get_client
+    from pine_assistant.cli.main import _get_client
     return _get_client()
 
 
 def _run(coro):
-    from pine_ai.cli.main import _run
+    from pine_assistant.cli.main import _run
     return _run(coro)
 
 

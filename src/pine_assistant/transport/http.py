@@ -6,7 +6,7 @@ from typing import Any, Optional
 
 import httpx
 
-from pine_ai.errors import PineAIError
+from pine_assistant.errors import PineAIError
 
 DEFAULT_BASE_URL = "https://www.19pine.ai"
 
@@ -17,7 +17,7 @@ class HttpClient:
         self._token = token
         self._client = httpx.AsyncClient(
             base_url=f"{self._base_url}/api",
-            headers={"User-Agent": "pine-ai-sdk/0.1.0", "Accept": "application/json"},
+            headers={"User-Agent": "pine-assistant-sdk/0.1.0", "Accept": "application/json"},
             timeout=30.0,
         )
 

@@ -1,22 +1,22 @@
-# pine-ai
+# pine-assistant
 
-[![PyPI version](https://img.shields.io/pypi/v/pine-ai)](https://pypi.org/project/pine-ai/)
-[![Python versions](https://img.shields.io/pypi/pyversions/pine-ai)](https://pypi.org/project/pine-ai/)
-[![license](https://img.shields.io/pypi/l/pine-ai)](./LICENSE)
+[![PyPI version](https://img.shields.io/pypi/v/pine-assistant)](https://pypi.org/project/pine-assistant/)
+[![Python versions](https://img.shields.io/pypi/pyversions/pine-assistant)](https://pypi.org/project/pine-assistant/)
+[![license](https://img.shields.io/pypi/l/pine-assistant)](./LICENSE)
 
 Pine AI SDK for Python. Let Pine AI handle your digital chores.
 
 ## Install
 
 ```bash
-pip install pine-ai          # SDK only
-pip install pine-ai[cli]     # SDK + CLI
+pip install pine-assistant          # SDK only
+pip install pine-assistant[cli]     # SDK + CLI
 ```
 
 ## Quick Start (Async)
 
 ```python
-from pine_ai import AsyncPineAI
+from pine_assistant import AsyncPineAI
 
 client = AsyncPineAI(access_token="...", user_id="...")
 await client.connect()
@@ -77,7 +77,7 @@ not individual chunks. Work log parts are debounced (3s silence).
 Pro subscription recommended. For non-subscribers:
 
 ```python
-from pine_ai import AsyncPineAI
+from pine_assistant import AsyncPineAI
 print(f"Pay at: {AsyncPineAI.session_url(session_id)}")
 ```
 

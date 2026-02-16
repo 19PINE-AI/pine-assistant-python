@@ -6,18 +6,18 @@ from typing import Optional
 import click
 from rich.console import Console
 
-from pine_ai.models.events import S2CEvent
+from pine_assistant.models.events import S2CEvent
 
 console = Console()
 
 
 def _get_client():
-    from pine_ai.cli.main import _get_client
+    from pine_assistant.cli.main import _get_client
     return _get_client()
 
 
 def _run(coro):
-    from pine_ai.cli.main import _run
+    from pine_assistant.cli.main import _run
     return _run(coro)
 
 
