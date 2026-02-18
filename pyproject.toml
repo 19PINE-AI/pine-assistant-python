@@ -33,9 +33,9 @@ cli = ["click>=8.1.0", "rich>=13.0.0"]
 dev = ["pytest>=7.0", "pytest-asyncio>=0.23.0", "ruff>=0.4.0"]
 
 [project.urls]
-Homepage = "https://github.com/19PINE-AI/pine-assistant-python"
-Repository = "https://github.com/19PINE-AI/pine-assistant-python"
-Issues = "https://github.com/19PINE-AI/pine-assistant-python/issues"
+Homepage = "https://github.com/19PINE-AI/pine-python"
+Repository = "https://github.com/19PINE-AI/pine-python"
+Issues = "https://github.com/19PINE-AI/pine-python/issues"
 
 [project.scripts]
 pine = "pine_assistant.cli.main:main"

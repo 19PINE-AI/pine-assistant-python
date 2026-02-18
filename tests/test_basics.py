@@ -15,7 +15,7 @@ from pine_assistant.models.events import NotificationEvent
 
 
 def test_version():
-    assert __version__ == "0.1.0"
+    assert __version__ == "0.1.1"
 
 
 def test_public_exports():
