@@ -1,14 +1,11 @@
 """
-Chat engine — send messages and yield complete events via async generator.
+Chat engine — send messages and yield events via async generator.
 
-Stream buffering:
-- Tier 1: session:text_part buffered until final: true
-- Tier 2: Non-streaming events yield immediately
-- Tier 3: session:work_log_part debounced (3s silence)
+All events are dispatched immediately as they arrive from the server.
 """
 
 import asyncio
-import time
+from datetime import datetime, timedelta, timezone
 from typing import Any, AsyncGenerator, Callable, Coroutine, Optional
 
 from pine_assistant.models.events import C2SEvent, S2CEvent
@@ -16,13 +13,11 @@ from pine_assistant.transport.socketio import SocketIOManager
 
 TERMINAL_STATES = {"task_finished", "task_cancelled", "task_stale"}
 DEFAULT_IDLE_TIMEOUT_S = 120.0
+DEFAULT_RESPONSE_IDLE_TIMEOUT_S = 2.0
 
-# Events that are buffered/debounced — NOT dispatched immediately
-BUFFERED_EVENTS = {S2CEvent.SESSION_TEXT_PART, S2CEvent.SESSION_WORK_LOG_PART}
-
-# Substantive response events — track for waiting_input termination gating
 SUBSTANTIVE_EVENTS = {
-    S2CEvent.SESSION_TEXT, S2CEvent.SESSION_FORM_TO_USER,
+    S2CEvent.SESSION_TEXT, S2CEvent.SESSION_TEXT_PART,
+    S2CEvent.SESSION_FORM_TO_USER,
     S2CEvent.SESSION_ASK_FOR_LOCATION, S2CEvent.SESSION_TASK_READY,
     S2CEvent.SESSION_TASK_FINISHED, S2CEvent.SESSION_INTERACTIVE_AUTH_CONFIRMATION,
     S2CEvent.SESSION_THREE_WAY_CALL, S2CEvent.SESSION_REWARD,
@@ -44,33 +39,18 @@ class ChatEvent:
         return f"ChatEvent(type={self.type!r}, session_id={self.session_id!r})"
 
 
-class TextPartBuffer:
-    """Buffer text_part chunks per message_id, flush on final: true."""
-
-    def __init__(self) -> None:
-        self._parts: dict[str, list[str]] = {}
-
-    def collect(self, message_id: str, content: str, final: bool) -> Optional[str]:
-        if message_id not in self._parts:
-            self._parts[message_id] = []
-        if content:
-            self._parts[message_id].append(content)
-        if final:
-            merged = "".join(self._parts.pop(message_id, []))
-            return merged
-        return None
-
-
 class ChatEngine:
     def __init__(
         self,
         sio: SocketIOManager,
         check_session_state: Optional[Callable[[str], Coroutine[Any, Any, dict[str, Any]]]] = None,
         idle_timeout_s: float = DEFAULT_IDLE_TIMEOUT_S,
+        response_idle_timeout_s: float = DEFAULT_RESPONSE_IDLE_TIMEOUT_S,
     ):
         self._sio = sio
         self._check_session_state = check_session_state
         self._idle_timeout_s = idle_timeout_s
+        self._response_idle_timeout_s = response_idle_timeout_s
 
     async def join_session(self, session_id: str) -> dict[str, Any]:
         """Join a session room — spec 5.1.1.
@@ -117,13 +97,31 @@ class ChatEngine:
         """Send a message and yield events with stream buffering.
         Production handler reads payload.data as {content, attachments, ...}.
         """
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=5)
         self._sio.emit(
             C2SEvent.SESSION_MESSAGE,
             self._build_message_data(content, attachments, referenced_sessions, action),
             session_id,
         )
-        async for event in self._listen(session_id):
+        async for event in self._listen(session_id, _skip_state_precheck=True):
+            if self._is_stale_event(event, cutoff):
+                continue
             yield event
+
+    @staticmethod
+    def _is_stale_event(event: "ChatEvent", cutoff: datetime) -> bool:
+        """Return True if the event's metadata timestamp predates the cutoff."""
+        meta = event.metadata
+        if not isinstance(meta, dict):
+            return False
+        ts_str = meta.get("timestamp")
+        if not ts_str:
+            return False
+        try:
+            event_ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+            return event_ts < cutoff
+        except (ValueError, TypeError):
+            return False
 
     def send_message(
         self,
@@ -141,10 +139,11 @@ class ChatEngine:
             session_id,
         )
 
-    async def _listen(self, session_id: str) -> AsyncGenerator[ChatEvent, None]:
-        """Listen for events with stream buffering."""
-        # Check session state before entering loop — don't hang on completed sessions
-        if self._check_session_state:
+    async def _listen(
+        self, session_id: str, *, _skip_state_precheck: bool = False,
+    ) -> AsyncGenerator[ChatEvent, None]:
+        """Listen for events — all events dispatched immediately."""
+        if not _skip_state_precheck and self._check_session_state:
             try:
                 session = await self._check_session_state(session_id)
                 if session.get("state") in TERMINAL_STATES:
@@ -153,79 +152,31 @@ class ChatEngine:
             except Exception:
                 pass  # best effort
 
-        text_buffer = TextPartBuffer()
         queue: asyncio.Queue[Optional[ChatEvent]] = asyncio.Queue()
         done = False
         received_agent_response = False
 
-        # Work log debounce state
-        wl_timers: dict[str, asyncio.TimerHandle] = {}
-        wl_buffers: dict[str, dict[str, Any]] = {}
-
-        def flush_wl(step_id: str) -> None:
-            buf = wl_buffers.pop(step_id, None)
-            wl_timers.pop(step_id, None)
-            if buf:
-                queue.put_nowait(ChatEvent(
-                    type=S2CEvent.SESSION_WORK_LOG_PART,
-                    session_id=session_id,
-                    data={"step_id": step_id, "text": buf.get("text", ""), "status": buf.get("status")},
-                ))
-
         def handler(event: str, raw: dict[str, Any]) -> None:
-            nonlocal done
+            nonlocal done, received_agent_response
             payload = raw.get("payload", {})
             p_session_id = payload.get("session_id")
             if p_session_id and p_session_id != session_id:
-                return  # Not our session — other handlers will process it
-
-            message_id = payload.get("message_id")
-            data = payload.get("data")
-            metadata = raw.get("metadata")
-
-            # Tier 1: text_part
-            if event == S2CEvent.SESSION_TEXT_PART:
-                if isinstance(data, dict):
-                    content = data.get("content", "")
-                    final = data.get("final", False)
-                    merged = text_buffer.collect(message_id or "unknown", content, final)
-                    if merged is not None:
-                        queue.put_nowait(ChatEvent(
-                            type=S2CEvent.SESSION_TEXT, session_id=session_id,
-                            message_id=message_id, data={"content": merged}, metadata=metadata,
-                        ))
                 return
 
-            # Tier 3: work_log_part debounce
-            if event == S2CEvent.SESSION_WORK_LOG_PART:
-                if isinstance(data, dict):
-                    step_id = data.get("step_id", "unknown")
-                    existing = wl_buffers.get(step_id, {"text": ""})
-                    existing["text"] = existing.get("text", "") + (data.get("text_delta", "") or "")
-                    if data.get("status"):
-                        existing["status"] = data["status"]
-                    wl_buffers[step_id] = existing
-                    old_timer = wl_timers.pop(step_id, None)
-                    if old_timer:
-                        old_timer.cancel()
-                    loop = asyncio.get_running_loop()
-                    wl_timers[step_id] = loop.call_later(3.0, flush_wl, step_id)
-                return
-
-            # All other events: dispatch immediately (pass-through for agent)
-            nonlocal received_agent_response
             queue.put_nowait(ChatEvent(
                 type=event, session_id=session_id,
-                message_id=message_id, data=data, metadata=metadata,
+                message_id=payload.get("message_id"),
+                data=payload.get("data"),
+                metadata=raw.get("metadata"),
             ))
             if event in SUBSTANTIVE_EVENTS:
                 received_agent_response = True
-            if event == S2CEvent.SESSION_INPUT_STATE and isinstance(data, dict):
-                if data.get("content") == "waiting_input" and received_agent_response:
+            if event == S2CEvent.SESSION_INPUT_STATE and isinstance(payload.get("data"), dict):
+                if payload["data"].get("content") == "waiting_input" and received_agent_response:
                     done = True
                     queue.put_nowait(None)
-            if event == S2CEvent.SESSION_STATE and isinstance(data, dict):
-                state = data.get("content", "")
+            if event == S2CEvent.SESSION_STATE and isinstance(payload.get("data"), dict):
+                state = payload["data"].get("content", "")
                 if state in TERMINAL_STATES:
                     done = True
                     queue.put_nowait(None)
@@ -234,10 +185,12 @@ class ChatEngine:
 
         try:
             while not done:
+                timeout = self._response_idle_timeout_s if received_agent_response else self._idle_timeout_s
                 try:
-                    evt = await asyncio.wait_for(queue.get(), timeout=self._idle_timeout_s)
+                    evt = await asyncio.wait_for(queue.get(), timeout=timeout)
                 except asyncio.TimeoutError:
-                    # Idle timeout — check session state via REST
+                    if received_agent_response:
+                        break
                     if self._check_session_state:
                         try:
                             session = await self._check_session_state(session_id)
@@ -255,8 +208,6 @@ class ChatEngine:
                 if evt is not None:
                     yield evt
         finally:
-            for t in wl_timers.values():
-                t.cancel()
             remove_handler()
 
     def send_form_response(self, session_id: str, message_id: str, form_data: dict[str, Any]) -> None:
