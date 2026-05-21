@@ -3,6 +3,8 @@ PineAI / AsyncPineAI — main SDK clients.
 """
 
 import asyncio
+import logging
+import os
 import uuid
 from pathlib import Path
 from typing import Any, AsyncGenerator, Generator, Optional
@@ -16,20 +18,39 @@ from pine_assistant.errors import ConnectionError
 from pine_assistant.models.events import C2SEvent
 
 DEVICE_ID_FILE = Path.home() / ".pine" / "device_id"
+DEVICE_ID_ENV = "PINE_DEVICE_ID"
+
+_logger = logging.getLogger(__name__)
 
 
 def _get_or_create_device_id(provided: Optional[str] = None) -> str:
+    """Resolve a stable device_id.
+
+    Precedence: explicit argument → PINE_DEVICE_ID env var → ~/.pine/device_id
+    → a new random UUID persisted to ~/.pine/device_id.
+
+    If persistence fails, a warning is logged so callers running in sandboxed
+    or read-only environments learn why their device_id rotates on each launch
+    — set PINE_DEVICE_ID to pin it.
+    """
     if provided:
         return provided
+    env_value = os.environ.get(DEVICE_ID_ENV)
+    if env_value:
+        return env_value.strip()
     try:
         return DEVICE_ID_FILE.read_text().strip()
-    except FileNotFoundError:
+    except (FileNotFoundError, OSError):
         device_id = str(uuid.uuid4())
         try:
             DEVICE_ID_FILE.parent.mkdir(parents=True, exist_ok=True)
             DEVICE_ID_FILE.write_text(device_id)
-        except OSError:
-            pass
+        except OSError as exc:
+            _logger.warning(
+                "Could not persist device_id to %s (%s). "
+                "Set the %s env var to pin a stable device_id.",
+                DEVICE_ID_FILE, exc, DEVICE_ID_ENV,
+            )
         return device_id
 
 

@@ -11,7 +11,22 @@ from typing import Any, Callable, Optional
 
 import socketio
 
+from pine_assistant.errors import ConnectionError as PineConnectionError
+
 SOCKETIO_PATH = "/api/v2/socket.io/"
+
+
+def _format_connect_error(data: Any) -> str:
+    """Render a server-supplied connect_error payload into a human-readable string."""
+    if data is None:
+        return "no payload"
+    if isinstance(data, str):
+        return data
+    if isinstance(data, dict):
+        msg = data.get("message") or data.get("error") or data.get("reason")
+        if msg:
+            return str(msg)
+    return repr(data)
 
 
 class SocketIOManager:
@@ -66,10 +81,15 @@ class SocketIOManager:
 
         self._sio = socketio.AsyncClient()
         ready_event = asyncio.Event()
+        connect_error_data: dict[str, Any] = {}
 
         @self._sio.event
         async def connect() -> None:
             pass
+
+        @self._sio.event
+        async def connect_error(data: Any) -> None:
+            connect_error_data["payload"] = data
 
         @self._sio.on("ready")
         async def on_ready(*_args: Any) -> None:
@@ -93,19 +113,36 @@ class SocketIOManager:
         async def disconnect(_reason: str = "") -> None:
             self._connected = False
 
-        await self._sio.connect(
-            self._base_url,
-            auth={"token": self._token},
-            transports=self._transports,
-            socketio_path=SOCKETIO_PATH,
-            wait_timeout=self._ready_timeout,
-        )
+        try:
+            await self._sio.connect(
+                self._base_url,
+                auth={"token": self._token},
+                transports=self._transports,
+                socketio_path=SOCKETIO_PATH,
+                wait_timeout=self._ready_timeout,
+            )
+        except Exception as exc:
+            # python-socketio raises the generic "One or more namespaces
+            # failed to connect" when the server replies with connect_error.
+            # Surface the actual server-supplied reason if we captured one.
+            if "payload" in connect_error_data:
+                reason = _format_connect_error(connect_error_data["payload"])
+                raise PineConnectionError(
+                    f"Socket.IO connect rejected by server: {reason}"
+                ) from exc
+            raise PineConnectionError(f"Socket.IO connect failed: {exc}") from exc
 
         try:
             await asyncio.wait_for(ready_event.wait(), timeout=self._ready_timeout)
         except asyncio.TimeoutError:
             await self._sio.disconnect()
-            raise TimeoutError(f"Timed out waiting for 'ready' event after {self._ready_timeout}s")
+            # The Pine backend accepts the WebSocket but only emits 'ready' after
+            # its own auth check. A timeout here almost always means the token or
+            # user_id is rejected — surface that hint instead of a generic timeout.
+            raise PineConnectionError(
+                f"Socket.IO connected but no 'ready' event after {self._ready_timeout}s. "
+                "This usually means access_token or user_id is invalid/expired — re-run the auth flow."
+            )
 
     def emit(
         self,
@@ -136,6 +173,12 @@ class SocketIOManager:
         )
 
         async def _do_emit() -> None:
+            # The socket may be torn down between scheduling and execution —
+            # e.g. user calls leave_session() then disconnect() back-to-back.
+            # In that case the emit can't possibly succeed; skip silently
+            # instead of logging a misleading "/ is not a connected namespace".
+            if not self._sio or not self._sio.connected:
+                return
             try:
                 await self._sio.emit(event_type, envelope)  # type: ignore[union-attr]
             except Exception as e:

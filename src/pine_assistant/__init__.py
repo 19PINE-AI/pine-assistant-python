@@ -11,7 +11,7 @@ from pine_assistant.sessions import SessionsAPI
 from pine_assistant.errors import PineAIError, AuthError, SessionError, ConnectionError
 from pine_assistant.models.events import C2SEvent, S2CEvent, NotificationEvent
 
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 __all__ = [
     "PineAI",
     "AsyncPineAI",
