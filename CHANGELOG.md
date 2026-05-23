@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.3] - 2026-05-23
+
+### Fixed
+
+- Added `aiohttp>=3.9.0` as an explicit dependency. `python-socketio`'s async
+  client requires `aiohttp` for the initial HTTP handshake regardless of which
+  transport (polling or websocket) is selected, but it is only declared as an
+  optional extra upstream. Without it, downstream consumers (e.g.
+  `pine-mcp-server`, the CLI) failed at import/connect time with
+  `ModuleNotFoundError: aiohttp` and had to work around it with
+  `uvx --with aiohttp`.
+
 ## [0.3.2] - 2026-05-21
 
 ### Fixed
