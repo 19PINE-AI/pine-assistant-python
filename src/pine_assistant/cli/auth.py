@@ -1,6 +1,5 @@
 """CLI: pine auth login|status|logout"""
 
-from typing import Optional
 
 import click
 from rich.console import Console
@@ -32,7 +31,7 @@ def auth():
 
 @auth.command("login")
 @click.option("--base-url", default=None, help="Pine AI base URL")
-def auth_login(base_url: Optional[str]):
+def auth_login(base_url: str | None):
     """Log in with email verification."""
 
     async def _login():

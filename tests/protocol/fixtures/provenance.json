@@ -1,0 +1,92 @@
+{
+  "session:error": {
+    "derived_from": "the server's protocol definition",
+    "recorded_at": null,
+    "source": "derived"
+  },
+  "session:form_to_user": {
+    "derived_from": null,
+    "recorded_at": "2026-08-08T13:48:53+00:00",
+    "source": "recorded"
+  },
+  "session:history": {
+    "derived_from": null,
+    "recorded_at": "2026-08-08T13:55:16+00:00",
+    "source": "recorded"
+  },
+  "session:input_state": {
+    "derived_from": null,
+    "recorded_at": "2026-08-08T13:55:16+00:00",
+    "source": "recorded"
+  },
+  "session:join": {
+    "derived_from": null,
+    "recorded_at": "2026-08-08T13:55:16+00:00",
+    "source": "recorded"
+  },
+  "session:llm_thinking": {
+    "derived_from": null,
+    "recorded_at": "2026-08-08T13:55:16+00:00",
+    "source": "recorded"
+  },
+  "session:message": {
+    "derived_from": "the server's protocol definition",
+    "recorded_at": null,
+    "source": "derived"
+  },
+  "session:message_status": {
+    "derived_from": null,
+    "recorded_at": "2026-08-08T13:55:16+00:00",
+    "source": "recorded"
+  },
+  "session:required_action": {
+    "derived_from": null,
+    "recorded_at": "2026-08-08T13:48:53+00:00",
+    "source": "recorded"
+  },
+  "session:restriction": {
+    "derived_from": "the server's protocol definition",
+    "recorded_at": null,
+    "source": "derived"
+  },
+  "session:rich_content": {
+    "derived_from": "the server's protocol definition",
+    "recorded_at": null,
+    "source": "derived"
+  },
+  "session:state": {
+    "derived_from": null,
+    "recorded_at": "2026-08-08T13:55:16+00:00",
+    "source": "recorded"
+  },
+  "session:task_finished": {
+    "derived_from": null,
+    "recorded_at": "2026-08-08T13:55:16+00:00",
+    "source": "recorded"
+  },
+  "session:task_ready": {
+    "derived_from": null,
+    "recorded_at": "2026-08-08T13:55:16+00:00",
+    "source": "recorded"
+  },
+  "session:text": {
+    "derived_from": null,
+    "recorded_at": "2026-08-08T13:55:16+00:00",
+    "source": "recorded"
+  },
+  "session:text_part": {
+    "derived_from": null,
+    "recorded_at": "2026-08-08T13:55:16+00:00",
+    "source": "recorded"
+  },
+  "session:tool_status": {
+    "derived_from": null,
+    "recorded_at": "2026-08-08T13:55:16+00:00",
+    "source": "recorded"
+  },
+  "session:update_title": {
+    "derived_from": null,
+    "recorded_at": "2026-08-08T13:55:16+00:00",
+    "source": "recorded"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "metadata": {
+    "event_id": "00000000-0000-4000-8000-084679774380",
+    "request_id": "00000000-0000-4000-8000-000000000001",
+    "timestamp": "2026-08-08T00:00:00Z",
+    "source": {
+      "role": "system"
+    },
+    "is_volatile": false
+  },
+  "type": "session:restriction",
+  "payload": {
+    "session_id": "1900000000000000001",
+    "message_id": "1900000000000000101",
+    "type": "session:restriction",
+    "data": {
+      "level": "blocked",
+      "reason": "account_review",
+      "message": "This task cannot be completed."
+    }
+  }
+}

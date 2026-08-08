@@ -1,0 +1,27 @@
+{
+  "metadata": {
+    "event_id": "dc632eb5-f344-4c9a-9f08-f9bb0fcdd3f1",
+    "request_id": "49e9e2c9-787d-4e45-a49d-83da0a852725",
+    "timestamp": "2026-08-08T13:50:34Z",
+    "source": {
+      "role": "system",
+      "user_id": "100000000000000001"
+    },
+    "is_volatile": false
+  },
+  "type": "session:join",
+  "payload": {
+    "session_id": "1900000000000000001",
+    "type": "session:join",
+    "data": {
+      "title": "New Task",
+      "state": "init",
+      "input_state": "waiting_input",
+      "input_state_code": "default",
+      "is_required_action": false,
+      "created_at": "2026-08-08T13:50:34Z",
+      "updated_at": "2026-08-08T13:50:34Z",
+      "max_message_revision": "0"
+    }
+  }
+}

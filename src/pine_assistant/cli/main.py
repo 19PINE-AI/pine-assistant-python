@@ -16,9 +16,10 @@ from pathlib import Path
 try:
     import click
     from rich.console import Console
-except ImportError:
-    raise SystemExit("CLI requires extras: pip install pine-assistant[cli]")
+except ImportError as exc:
+    raise SystemExit("CLI requires extras: pip install pine-assistant[cli]") from exc
 
+from pine_assistant import __version__
 from pine_assistant.client import AsyncPineAI
 
 console = Console()
@@ -54,7 +55,7 @@ def _run(coro):
 
 
 @click.group()
-@click.version_option("0.1.0")
+@click.version_option(__version__)
 def main():
     """Pine AI CLI — Let Pine AI handle your digital chores."""
 

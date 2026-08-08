@@ -1,0 +1,198 @@
+{
+  "metadata": {
+    "event_id": "8be552fd-3e06-48ec-95e5-65df7b2bb9fe",
+    "group_id": "d15ce9f7-f937-4aef-929b-c848a8cc795c",
+    "is_required_action": true,
+    "is_volatile": false,
+    "request_id": "7920bfdc-99e2-4682-a270-2ba0da10a150",
+    "source": {
+      "role": "agent",
+      "user_id": "100000000000000001"
+    },
+    "timestamp": "2026-08-08T13:48:53Z"
+  },
+  "payload": {
+    "data": {
+      "form": {
+        "fields": [
+          {
+            "description": "The full legal name of the account holder on your Xfinity bill.",
+            "is_required": true,
+            "name": "Account Holder Full Name",
+            "pii_level": "L1",
+            "placeholder": "[redacted]",
+            "prefilled": "[redacted]",
+            "source": "knowledge_base",
+            "type": "text"
+          },
+          {
+            "description": "Gender of the primary account holder, required by Xfinity customer service representatives for identity authentication during phone calls.",
+            "is_required": true,
+            "name": "Legal Gender",
+            "options": [
+              "[redacted]",
+              "[redacted]",
+              "[redacted]"
+            ],
+            "pii_level": "L1",
+            "placeholder": "[redacted]",
+            "prefilled": "[redacted]",
+            "source": "knowledge_base",
+            "type": "radio"
+          },
+          {
+            "description": "The email address associated with your Xfinity account for identity verification.",
+            "is_required": true,
+            "name": "Email Address",
+            "pii_level": "L2",
+            "placeholder": "[redacted]",
+            "prefilled": "[redacted]",
+            "source": "knowledge_base",
+            "type": "text"
+          },
+          {
+            "description": "The phone number linked to your Xfinity account.",
+            "is_required": true,
+            "name": "Phone Number",
+            "pii_level": "L2",
+            "placeholder": "[redacted]",
+            "prefilled": "[redacted]",
+            "source": "knowledge_base",
+            "type": "text"
+          },
+          {
+            "description": "Complete service address including street, unit, city, state, and ZIP code where your Xfinity service is installed.",
+            "is_required": true,
+            "name": "Service Address",
+            "pii_level": "L3",
+            "placeholder": "[redacted]",
+            "prefilled": "[redacted]",
+            "source": "knowledge_base",
+            "type": "text"
+          },
+          {
+            "description": "Your 16-digit Xfinity residential account number (usually starts with 8).",
+            "is_required": true,
+            "name": "Xfinity Account Number",
+            "pii_level": "L2",
+            "placeholder": "[redacted]",
+            "prefilled": "[redacted]",
+            "source": "knowledge_base",
+            "type": "text"
+          },
+          {
+            "description": "Your 4-digit Xfinity security PIN or account passcode used for phone authentication.",
+            "is_required": true,
+            "name": "Xfinity Account Security PIN",
+            "pii_level": "L3",
+            "placeholder": "[redacted]",
+            "prefilled": "[redacted]",
+            "source": "knowledge_base",
+            "type": "text"
+          },
+          {
+            "description": "The last 4 digits of the payment card on file or Social Security Number for secondary verification.",
+            "is_required": true,
+            "name": "Last Four Digits of Payment Card or SSN",
+            "pii_level": "L2",
+            "placeholder": "[redacted]",
+            "prefilled": "[redacted]",
+            "source": "knowledge_base",
+            "type": "text"
+          },
+          {
+            "description": "Your current Xfinity internet plan speed or bundled packages (e.g., Gigabit Extra 1.2 Gbps, Blast 800 Mbps, or Internet + TV bundle).",
+            "is_required": true,
+            "name": "Current Internet Plan or Package",
+            "pii_level": "L1",
+            "placeholder": "[redacted]",
+            "prefilled": "[redacted]",
+            "source": "knowledge_base",
+            "type": "text"
+          },
+          {
+            "description": "Sharing a recent PDF bill or screenshot can help identify active line-item fees, equipment rentals, and regional promo codes.",
+            "is_required": true,
+            "name": "Bill Sharing Option",
+            "options": [
+              "[redacted]",
+              "[redacted]"
+            ],
+            "pii_level": "L1",
+            "placeholder": "[redacted]",
+            "prefilled": "[redacted]",
+            "source": "agent",
+            "type": "radio"
+          },
+          {
+            "description": "Xfinity offers an extra $10/month discount if enrolled in bank account autopay (ACH) versus a credit/debit card.",
+            "is_required": true,
+            "name": "Autopay Method Preference",
+            "options": [
+              "[redacted]",
+              "[redacted]",
+              "[redacted]"
+            ],
+            "pii_level": "L1",
+            "placeholder": "[redacted]",
+            "prefilled": "[redacted]",
+            "source": "knowledge_base",
+            "type": "radio"
+          },
+          {
+            "description": "Xfinity rate agreements often come with 1-year or 5-year price guarantee terms.",
+            "is_required": true,
+            "name": "Price Guarantee Term Preference",
+            "options": [
+              "[redacted]",
+              "[redacted]",
+              "[redacted]"
+            ],
+            "pii_level": "L1",
+            "placeholder": "[redacted]",
+            "prefilled": "[redacted]",
+            "source": "knowledge_base",
+            "type": "radio"
+          },
+          {
+            "description": "If your current premium tier cannot be reduced to $50/mo, are you open to adjusting your speed tier or removing unneeded add-ons?",
+            "is_required": true,
+            "name": "Speed and Package Flexibility",
+            "options": [
+              "[redacted]",
+              "[redacted]",
+              "[redacted]"
+            ],
+            "pii_level": "L1",
+            "placeholder": "[redacted]",
+            "prefilled": "[redacted]",
+            "source": "agent",
+            "type": "radio"
+          },
+          {
+            "description": "If Xfinity retention reps cannot meet $50/mo exactly, select all acceptable backup choices.",
+            "is_required": true,
+            "name": "Negotiation Flexibility Alternatives",
+            "options": [
+              "[redacted]",
+              "[redacted]",
+              "[redacted]",
+              "[redacted]"
+            ],
+            "pii_level": "L1",
+            "placeholder": "[redacted]",
+            "prefilled": "[redacted]",
+            "source": "agent",
+            "type": "multiselect"
+          }
+        ]
+      },
+      "message_to_user": "I'm on it! I've sent over a quick form to get your Xfinity account details and preferred autopay options so we can start negotiating that bill down to $50."
+    },
+    "message_id": "816306070082297856",
+    "revision": "3009087",
+    "session_id": "1900000000000000001",
+    "type": "session:form_to_user"
+  },
+  "type": "session:form_to_user"
+}

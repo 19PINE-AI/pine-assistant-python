@@ -1,0 +1,21 @@
+{
+  "metadata": {
+    "event_id": "01382d01-c23d-42c7-a420-be074431bb4f",
+    "group_id": "d15ce9f7-f937-4aef-929b-c848a8cc795c",
+    "is_volatile": false,
+    "source": {
+      "role": "system",
+      "user_id": "100000000000000001"
+    },
+    "timestamp": "2026-08-08T13:48:53Z"
+  },
+  "payload": {
+    "data": {
+      "is_required_action": true
+    },
+    "message_id": "816306070224904192",
+    "session_id": "1900000000000000001",
+    "type": "session:required_action"
+  },
+  "type": "session:required_action"
+}

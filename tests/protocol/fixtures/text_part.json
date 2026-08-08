@@ -1,0 +1,22 @@
+{
+  "metadata": {
+    "event_id": "8c7d4b90-236d-46f4-b8e8-f86237a24da1",
+    "group_id": "16148082-0774-4a01-a69d-10e4d427d8aa",
+    "is_volatile": false,
+    "source": {
+      "role": "agent",
+      "user_id": "100000000000000001"
+    },
+    "timestamp": "2026-08-08T13:53:54Z"
+  },
+  "payload": {
+    "data": {
+      "content": "I tried calling the number, but the call didn't go through successfully and disconnected right away.",
+      "final": false
+    },
+    "message_id": "816307333704466432",
+    "session_id": "1900000000000000001",
+    "type": "session:text_part"
+  },
+  "type": "session:text_part"
+}

@@ -2,11 +2,11 @@
 Pine AI error types — maps spec section 4.2 error codes.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 
 class PineAIError(Exception):
-    def __init__(self, code: str, message: str, details: Optional[dict[str, Any]] = None):
+    def __init__(self, code: str, message: str, details: dict[str, Any] | None = None):
         super().__init__(message)
         self.code = code
         self.details = details
@@ -18,7 +18,7 @@ class AuthError(PineAIError):
 
 
 class SessionError(PineAIError):
-    def __init__(self, message: str, code: str = "session_error", details: Optional[dict[str, Any]] = None):
+    def __init__(self, message: str, code: str = "session_error", details: dict[str, Any] | None = None):
         super().__init__(code, message, details)
 
 

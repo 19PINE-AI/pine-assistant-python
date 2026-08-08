@@ -4,7 +4,7 @@ Sessions REST API — spec section 4.3.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from pine_assistant.transport.http import HttpClient
 
@@ -13,7 +13,7 @@ class SessionsAPI:
     def __init__(self, http: HttpClient):
         self._http = http
 
-    async def list(self, state: Optional[str] = None, limit: int = 30, offset: int = 0) -> dict[str, Any]:
+    async def list(self, state: str | None = None, limit: int = 30, offset: int = 0) -> dict[str, Any]:
         """List sessions — spec 4.3.1"""
         params = f"?limit={limit}&offset={offset}"
         if state:
@@ -61,7 +61,7 @@ class SessionsAPI:
 
     async def upload_attachment(self, file_path: str) -> list[dict[str, Any]]:
         """Upload attachment — spec 4.4.1. Multipart form upload."""
-        return await self._http.upload(f"/v2/attachments", file_path)
+        return await self._http.upload("/v2/attachments", file_path)
 
     async def delete_attachment(self, attachment_id: str) -> None:
         """Delete attachment — spec 4.4.2"""

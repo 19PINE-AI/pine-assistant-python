@@ -27,13 +27,18 @@ jobs:
         run: pip install build twine
 
       - name: Install package
-        run: pip install .
+        run: pip install ".[dev]"
 
       - name: Verify import
         run: python -c "from pine_assistant import PineAI, AsyncPineAI, __version__; print(f'pine-assistant {__version__} OK')"
 
+      - name: Lint
+        run: ruff check src tests
+
+      # Contract and flow tests run offline against recorded fixtures.
+      # tests/integration needs a token and spends credits — see its README.
       - name: Run tests
-        run: pip install pytest pytest-asyncio && pytest tests/ -v --ignore=tests/integration
+        run: pytest tests/ -v --ignore=tests/integration
 
       - name: Build distribution
         run: python -m build

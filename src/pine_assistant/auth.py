@@ -6,8 +6,8 @@ Two-step email verification. No reCAPTCHA required.
 
 from typing import Any
 
-from pine_assistant.transport.http import HttpClient
 from pine_assistant.errors import AuthError
+from pine_assistant.transport.http import HttpClient
 
 
 class Auth:
@@ -19,7 +19,7 @@ class Auth:
         try:
             return await self._http.post("/v2/auth/email/request", {"email": email}, authenticated=False)
         except Exception as e:
-            raise AuthError(f"Failed to request auth code: {e}")
+            raise AuthError(f"Failed to request auth code: {e}") from e
 
     async def verify_code(self, email: str, code: str, request_token: str) -> dict[str, Any]:
         """Step 2: Verify code and get access token — spec 4.1.2"""
@@ -32,4 +32,4 @@ class Auth:
             self._http.set_token(result["access_token"])
             return result
         except Exception as e:
-            raise AuthError(f"Failed to verify auth code: {e}")
+            raise AuthError(f"Failed to verify auth code: {e}") from e

@@ -1,0 +1,25 @@
+{
+  "metadata": {
+    "event_id": "577b6c2c-b927-4dfa-a348-276eb01e4544",
+    "group_id": "16148082-0774-4a01-a69d-10e4d427d8aa",
+    "is_volatile": true,
+    "request_id": "344ea29a-d16e-4099-845c-6352604e6bfe",
+    "source": {
+      "role": "system",
+      "user_id": "100000000000000001"
+    },
+    "timestamp": "2026-08-08T13:51:00Z"
+  },
+  "payload": {
+    "data": {
+      "message_id": "816306493925101568",
+      "request_id": "16148082-0774-4a01-a69d-10e4d427d8aa",
+      "revision": "3009104",
+      "status": "processed"
+    },
+    "message_id": "816306604294029312",
+    "session_id": "1900000000000000001",
+    "type": "session:message_status"
+  },
+  "type": "session:message_status"
+}

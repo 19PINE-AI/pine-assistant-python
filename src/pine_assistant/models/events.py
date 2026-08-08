@@ -1,5 +1,9 @@
 """
-Socket.IO event type constants — derived from pine_backend_api_spec.md sections 5.1 and 5.2.
+Socket.IO event types inside the supported protocol scope.
+
+Only the supported surface is modelled here. The server emits many more events;
+they reach callers verbatim through the same stream and carry no compatibility
+guarantee — see `pine_assistant.is_supported_event`.
 """
 
 import sys
@@ -14,67 +18,54 @@ else:
 
 
 class C2SEvent(StrEnum):
-    """Client-to-Server events — spec 5.1.1"""
+    """Client-to-server events inside the supported scope."""
     SESSION_JOIN = "session:join"
-    SESSION_LEAVE = "session:leave"
     SESSION_HISTORY = "session:history"
     SESSION_MESSAGE = "session:message"
-    SESSION_MESSAGE_STATUS = "session:message_status"
     SESSION_FORM_TO_USER = "session:form_to_user"
-    SESSION_ASK_FOR_LOCATION = "session:ask_for_location"
-    SESSION_LOCATION_SELECTION = "session:location_selection"
-    SESSION_INTERACTIVE_AUTH_CONFIRMATION = "session:interactive_auth_confirmation"
-    SESSION_UPDATE_PROFILE = "session:update_profile"
-    SESSION_TYPING_START = "session:typing_start"
-    SESSION_TYPING_STOP = "session:typing_stop"
 
 
 class S2CEvent(StrEnum):
-    """Server-to-Client events — spec 5.1.2"""
+    """Server-to-client events inside the supported scope."""
+
+    # Connection and session
     READY = "ready"
     SESSION_JOIN = "session:join"
     SESSION_HISTORY = "session:history"
-    SESSION_MESSAGE_STATUS = "session:message_status"
-    SESSION_DEBUG = "session:debug"
-    SESSION_TEXT_PART = "session:text_part"
+    SESSION_ERROR = "session:error"
+
+    # Conversation
+    SESSION_MESSAGE = "session:message"
     SESSION_TEXT = "session:text"
+    SESSION_TEXT_PART = "session:text_part"
     SESSION_RICH_CONTENT = "session:rich_content"
-    SESSION_UPDATE_TITLE = "session:update_title"
+    SESSION_LLM_THINKING = "session:llm_thinking"
+
+    # Session state
     SESSION_STATE = "session:state"
     SESSION_INPUT_STATE = "session:input_state"
-    SESSION_THINKING = "session:thinking"
-    SESSION_TASK_PROCESSING = "session:task_processing"
-    SESSION_WORK_LOG = "session:work_log"
-    SESSION_WORK_LOG_PART = "session:work_log_part"
+    SESSION_MESSAGE_STATUS = "session:message_status"
+    SESSION_REQUIRED_ACTION = "session:required_action"
+    SESSION_UPDATE_TITLE = "session:update_title"
+    SESSION_RESTRICTION = "session:restriction"
+
+    # Interaction
     SESSION_FORM_TO_USER = "session:form_to_user"
-    SESSION_ASK_FOR_LOCATION = "session:ask_for_location"
-    SESSION_LOCATION_SELECTION = "session:location_selection"
-    SESSION_REWARD = "session:reward"
-    SESSION_PAYMENT = "session:payment"
+
+    # Task and result
     SESSION_TASK_READY = "session:task_ready"
     SESSION_TASK_FINISHED = "session:task_finished"
-    SESSION_INTERACTIVE_AUTH_CONFIRMATION = "session:interactive_auth_confirmation"
-    SESSION_THREE_WAY_CALL = "session:three_way_call"
-    SESSION_CONTINUE_IN_NEW_TASK = "session:continue_in_new_task"
-    SESSION_CARD = "session:card"
-    SESSION_NEXT_TASKS = "session:next_tasks"
-    SESSION_ACTION_STATUS = "session:action_status"
-    SESSION_SOCIAL_SHARING = "session:social_sharing"
-    SESSION_ERROR = "session:error"
-    SESSION_RETRY = "session:retry"
-    SESSION_COMPUTER_USE_INTERVENTION = "session:computer_use_intervention"
-    SESSION_OUTBOUND_NOTIFICATION = "session:outbound_notification"
+    SESSION_TOOL_STATUS = "session:tool_status"
 
 
-class NotificationEvent(StrEnum):
-    """Notification events — spec 5.2.2"""
-    USER_UPDATED = "notification:user_updated"
-    SESSION_CREATED = "notification:session_created"
-    SESSION_DELETED = "notification:session_deleted"
-    SESSION_UPDATED = "notification:session_updated"
-    NEW_MESSAGE = "notification:new_message"
-    CALLER_ID_NUMBER = "notification:caller_id_number"
-    SUBSCRIPTION_UPDATED = "notification:subscription_updated"
-    CREDITS_SUFFICIENT = "notification:credits_sufficient"
-    CREDITS_INSUFFICIENT = "notification:credits_insufficient"
-    ERROR = "notification:error"
+SUPPORTED_EVENTS = frozenset(e.value for e in S2CEvent) | frozenset(e.value for e in C2SEvent)
+
+
+def is_supported_event(event_type: str) -> bool:
+    """Whether an event carries the compatibility guarantee.
+
+    An unsupported event is still delivered — the SDK never drops one — but it
+    may be renamed, have its payload changed, or cease to be emitted without
+    notice. Tolerating one is required; depending on one is not.
+    """
+    return event_type in SUPPORTED_EVENTS

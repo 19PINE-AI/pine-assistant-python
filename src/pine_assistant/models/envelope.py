@@ -2,32 +2,33 @@
 Master Envelope — spec section 4.1.
 """
 
-from typing import Any, Optional
+from typing import Any
+
 from pydantic import BaseModel
 
 
 class UserSource(BaseModel):
     role: str  # "user" | "agent" | "system"
-    user_id: Optional[str] = None
-    device_id: Optional[str] = None
-    plat: Optional[str] = None       # Platform identifier (production field)
-    version: Optional[str] = None    # App version (production field)
+    user_id: str | None = None
+    device_id: str | None = None
+    plat: str | None = None       # Platform identifier (production field)
+    version: str | None = None    # App version (production field)
 
 
 class MessageMetadata(BaseModel):
     event_id: str
-    request_id: Optional[str] = None
+    request_id: str | None = None
     timestamp: str
     source: UserSource
     is_volatile: bool = False
 
 
 class SessionMessagePayload(BaseModel):
-    session_id: Optional[str] = None
-    message_id: Optional[str] = None
-    quoted_message_id: Optional[str] = None
-    type: Optional[str] = None
-    data: Optional[Any] = None
+    session_id: str | None = None
+    message_id: str | None = None
+    quoted_message_id: str | None = None
+    type: str | None = None
+    data: Any | None = None
 
 
 class MessageEnvelope(BaseModel):

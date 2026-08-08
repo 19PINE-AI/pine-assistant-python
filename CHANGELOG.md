@@ -5,6 +5,70 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-08-08
+
+Aligned to the supported protocol scope: the subset of the task-session
+Socket.IO protocol whose names, payloads, and semantics carry a compatibility
+guarantee. What the SDK models is now that subset and nothing else.
+
+### Added
+
+- `is_supported_event()` and `SUPPORTED_EVENTS` — whether an event carries the
+  guarantee.
+- `session:llm_thinking`, `session:tool_status`, `session:required_action` and
+  `session:restriction`, with models. All four are in the supported scope and
+  none were modelled before; `session:tool_status` is where an outbound call
+  reports its number, duration, credits, and textual outcome.
+- `AsyncPineAI.rebuild()` — pages through history until the cursor is
+  exhausted. Recovery is an unconditional rebuild: joining never resumes from a
+  cursor, and a short or empty page does not mean a range is done.
+- `AsyncPineAI.on_reconnect()` — fires after a reconnect has re-joined, so
+  callers can rebuild. A connection can stay open after delivery has stopped.
+- `InputState` with `awaiting_credits` and `needs_phone_verification`. A
+  blocking condition is read from `session:input_state`, because the events that
+  elaborate on one are mostly outside the scope.
+- `AsyncPineAI.emit_event()` — the escape hatch for sending anything outside the
+  supported surface.
+- Protocol fixtures and contract tests under `tests/protocol`, and
+  `tests/integration/record_fixtures.py` to record them from a live session.
+  Re-recording is the only way server drift gets noticed.
+
+### Changed
+
+- `session:join` now carries `since_revision` "0", on first join and on
+  reconnect. The incremental-synchronization fields in the response are ignored.
+- Events are deduplicated on the event identifier together with the message
+  type. Keying on the identifier alone drops real events, since identifiers
+  collide across types.
+- A turn begins and ends on supported events only. It previously hinged on
+  `session:ask_for_location`, `session:interactive_auth_confirmation`,
+  `session:three_way_call` and `session:reward`, none of which are maintained.
+
+### Fixed
+
+- Sessions joined through `join_session()` were never re-joined after a
+  reconnect. Membership was tracked on the fire-and-forget emit path only, while
+  joining goes out through the request/response path.
+
+### Removed
+
+Everything below is still emitted by the server and still reaches callers
+untouched — the SDK just no longer models it. Send with `emit_event()`.
+
+- `send_auth_confirmation()`, `send_location_response()`,
+  `send_location_selection()`.
+- `NotificationEvent`, the `notification:*` constants, and the `session:reward`
+  and `session:payment` models.
+- The out-of-scope `S2CEvent` and `C2SEvent` members, including
+  `session:work_log`, `session:work_log_part` and `session:thinking`. The
+  reasoning stream in scope is `session:llm_thinking`, a different event that
+  the SDK did not previously carry.
+- The `action` argument on `chat()` and `send_message()`, and `request_work_log`
+  on `get_history()`.
+- Wall-clock filtering of events older than the moment a turn began. It
+  contradicts rebuilding from history, and a clock offset made it drop real
+  events.
+
 ## [0.3.3] - 2026-05-23
 
 ### Fixed

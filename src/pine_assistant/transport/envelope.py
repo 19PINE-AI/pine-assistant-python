@@ -4,7 +4,7 @@ Envelope construction and parsing — spec section 4.1.
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 
 from pine_assistant.models.envelope import MessageEnvelope, MessageMetadata, SessionMessagePayload, UserSource
 
@@ -14,9 +14,9 @@ def build_envelope(
     data: Any,
     user_id: str,
     device_id: str,
-    session_id: Optional[str] = None,
-    message_id: Optional[str] = None,
-    request_id: Optional[str] = None,
+    session_id: str | None = None,
+    message_id: str | None = None,
+    request_id: str | None = None,
     is_volatile: bool = False,
 ) -> dict[str, Any]:
     """Build a C2S message envelope as a dict ready for Socket.IO emit."""
@@ -39,7 +39,7 @@ def build_envelope(
     return envelope.model_dump()
 
 
-def parse_envelope(raw: dict[str, Any]) -> Optional[MessageEnvelope]:
+def parse_envelope(raw: dict[str, Any]) -> MessageEnvelope | None:
     """Parse an S2C message envelope. Returns None if invalid."""
     try:
         return MessageEnvelope.model_validate(raw)

@@ -1,8 +1,7 @@
 """Unit tests for SocketIOManager.connect() — connect_error surfacing."""
 
-import asyncio
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -74,9 +73,11 @@ async def test_connect_error_payload_surfaces_in_pine_connection_error():
         device_id="d1",
         ready_timeout=0.1,
     )
-    with patch("pine_assistant.transport.socketio.socketio.AsyncClient", return_value=fake):
-        with pytest.raises(PineConnectionError) as excinfo:
-            await mgr.connect()
+    with (
+        patch("pine_assistant.transport.socketio.socketio.AsyncClient", return_value=fake),
+        pytest.raises(PineConnectionError) as excinfo,
+    ):
+        await mgr.connect()
     msg = str(excinfo.value)
     assert "rejected by server" in msg
     assert "invalid token" in msg
@@ -98,9 +99,11 @@ async def test_connect_error_without_payload_falls_back_to_generic():
         device_id="d",
         ready_timeout=0.1,
     )
-    with patch("pine_assistant.transport.socketio.socketio.AsyncClient", return_value=fake):
-        with pytest.raises(PineConnectionError) as excinfo:
-            await mgr.connect()
+    with (
+        patch("pine_assistant.transport.socketio.socketio.AsyncClient", return_value=fake),
+        pytest.raises(PineConnectionError) as excinfo,
+    ):
+        await mgr.connect()
     assert "transport closed" in str(excinfo.value)
 
 
@@ -141,9 +144,11 @@ async def test_silent_stall_raises_diagnostic_pine_error():
         device_id="d",
         ready_timeout=0.1,
     )
-    with patch("pine_assistant.transport.socketio.socketio.AsyncClient", return_value=fake):
-        with pytest.raises(PineConnectionError) as excinfo:
-            await mgr.connect()
+    with (
+        patch("pine_assistant.transport.socketio.socketio.AsyncClient", return_value=fake),
+        pytest.raises(PineConnectionError) as excinfo,
+    ):
+        await mgr.connect()
     msg = str(excinfo.value)
     assert "no 'ready' event" in msg
     assert "re-run the auth flow" in msg

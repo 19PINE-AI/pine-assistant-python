@@ -1,0 +1,22 @@
+{
+  "metadata": {
+    "event_id": "00000000-0000-4000-8000-645085987330",
+    "request_id": "00000000-0000-4000-8000-000000000001",
+    "timestamp": "2026-08-08T00:00:00Z",
+    "source": {
+      "role": "user"
+    },
+    "is_volatile": false
+  },
+  "type": "session:message",
+  "payload": {
+    "session_id": "1900000000000000001",
+    "message_id": "1900000000000000101",
+    "type": "session:message",
+    "data": {
+      "content": "Negotiate my Comcast bill.",
+      "attachments": [],
+      "referenced_sessions": []
+    }
+  }
+}

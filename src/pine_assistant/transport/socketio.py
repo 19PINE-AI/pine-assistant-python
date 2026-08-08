@@ -6,8 +6,10 @@ Waits for `ready` event before resolving connect().
 """
 
 import asyncio
+import contextlib
 import uuid
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 import socketio
 
@@ -35,8 +37,8 @@ class SocketIOManager:
         base_url: str,
         token: str,
         user_id: str,
-        device_id: Optional[str] = None,
-        transports: Optional[list[str]] = None,
+        device_id: str | None = None,
+        transports: list[str] | None = None,
         ready_timeout: float = 15.0,
     ):
         self._base_url = base_url
@@ -45,9 +47,10 @@ class SocketIOManager:
         self._device_id = device_id or str(uuid.uuid4())
         self._transports = transports or ["websocket"]
         self._ready_timeout = ready_timeout
-        self._sio: Optional[socketio.AsyncClient] = None
+        self._sio: socketio.AsyncClient | None = None
         self._connected = False
         self._event_handlers: list[Callable[[str, dict[str, Any]], None]] = []
+        self._reconnect_handlers: list[Callable[[], None]] = []
         self._joined_sessions: set[str] = set()
 
     @property
@@ -62,17 +65,23 @@ class SocketIOManager:
         """Add an event handler. Returns a cleanup function. Supports multiple concurrent handlers."""
         self._event_handlers.append(handler)
         def remove() -> None:
-            try:
+            with contextlib.suppress(ValueError):
                 self._event_handlers.remove(handler)
-            except ValueError:
-                pass
         return remove
 
-    def on_event(self, handler: Optional[Callable[[str, dict[str, Any]], None]]) -> None:
-        """Set a single event handler (replaces all). Use add_event_handler() for multi-session."""
-        self._event_handlers.clear()
-        if handler is not None:
-            self._event_handlers.append(handler)
+    def add_reconnect_handler(self, handler: Callable[[], None]) -> Callable[[], None]:
+        """Register a callback fired after a reconnect has re-joined its sessions.
+
+        A reconnect invalidates whatever the caller had accumulated: delivery
+        may have stopped before the socket noticed, so state has to be rebuilt
+        rather than resumed.
+        """
+        self._reconnect_handlers.append(handler)
+
+        def remove() -> None:
+            with contextlib.suppress(ValueError):
+                self._reconnect_handlers.remove(handler)
+        return remove
 
     async def connect(self) -> None:
         """Connect to Pine backend, wait for `ready` event — spec 5.1.2."""
@@ -97,9 +106,13 @@ class SocketIOManager:
             if not ready_event.is_set():
                 ready_event.set()
             else:
-                # Reconnection: re-join all previously joined sessions
+                # Reconnection: re-join every previously joined session. State
+                # is rebuilt from history rather than resumed from a cursor, so
+                # the join carries since_revision "0" here too.
                 for sid in list(self._joined_sessions):
-                    self.emit("session:join", None, sid)
+                    self.emit("session:join", {"since_revision": "0"}, sid)
+                for on_reconnect in list(self._reconnect_handlers):
+                    on_reconnect()
 
         @self._sio.on("*")
         async def on_any(event: str, data: Any) -> None:
@@ -142,14 +155,28 @@ class SocketIOManager:
             raise PineConnectionError(
                 f"Socket.IO connected but no 'ready' event after {self._ready_timeout}s. "
                 "This usually means access_token or user_id is invalid/expired — re-run the auth flow."
-            )
+            ) from None
+
+    def _track_membership(self, event_type: str, session_id: str | None) -> None:
+        """Remember which sessions to re-join after a reconnect.
+
+        Both emit paths run through here: joining goes out via emit_and_wait,
+        so tracking only on the fire-and-forget path would leave every joined
+        session unrestored after a drop.
+        """
+        if not session_id:
+            return
+        if event_type == "session:join":
+            self._joined_sessions.add(session_id)
+        elif event_type == "session:leave":
+            self._joined_sessions.discard(session_id)
 
     def emit(
         self,
         event_type: str,
         data: Any,
-        session_id: Optional[str] = None,
-        message_id: Optional[str] = None,
+        session_id: str | None = None,
+        message_id: str | None = None,
     ) -> None:
         """Emit a typed event with envelope wrapping.
 
@@ -158,11 +185,7 @@ class SocketIOManager:
         """
         if not self._sio or not self._sio.connected:
             raise RuntimeError("Socket.IO not connected")
-        # Track join/leave for reconnection
-        if event_type == "session:join" and session_id:
-            self._joined_sessions.add(session_id)
-        if event_type == "session:leave" and session_id:
-            self._joined_sessions.discard(session_id)
+        self._track_membership(event_type, session_id)
         from pine_assistant.transport.envelope import build_envelope
         envelope = build_envelope(
             event_type, data,
@@ -195,12 +218,13 @@ class SocketIOManager:
         self,
         event_type: str,
         data: Any,
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
         timeout: float = 10.0,
     ) -> dict[str, Any]:
         """Emit and wait for a response event with matching session_id."""
         if not self._sio or not self._sio.connected:
             raise RuntimeError("Socket.IO not connected")
+        self._track_membership(event_type, session_id)
         from pine_assistant.transport.envelope import build_envelope
         request_id = str(uuid.uuid4())
         envelope = build_envelope(
@@ -234,7 +258,7 @@ class SocketIOManager:
         try:
             await asyncio.wait_for(result_event.wait(), timeout=timeout)
         except asyncio.TimeoutError:
-            raise TimeoutError(f"Timeout waiting for {event_type} response")
+            raise TimeoutError(f"Timeout waiting for {event_type} response") from None
         finally:
             remove_handler()
 

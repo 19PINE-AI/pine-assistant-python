@@ -1,0 +1,49 @@
+{
+  "metadata": {
+    "event_id": "f8389d0c-3a3c-4ee2-a0fa-9bc7e0e8d109",
+    "group_id": "16148082-0774-4a01-a69d-10e4d427d8aa",
+    "is_volatile": false,
+    "source": {
+      "role": "agent",
+      "user_id": "100000000000000001"
+    },
+    "timestamp": "2026-08-08T13:54:21Z"
+  },
+  "payload": {
+    "data": {
+      "completion": {
+        "animation_type": "progress",
+        "engage_prompt": "Would you like to discuss trying the call again or taking a different approach?",
+        "outcome_narrative": "Pine placed a call to your event contact to ask what time Saturday's dinner starts. Unfortunately, the call failed to connect, and per your strict instruction, Pine did not make any further retry attempts.",
+        "result_title": "Progress Made",
+        "share_text": "PineAI helped me make real progress on my issue. Give it a try!",
+        "summary": {
+          "achievements": [
+            {
+              "description": "Task completed in under 10 minutes",
+              "id": "speed_demon",
+              "is_new": true,
+              "rarity": "rare",
+              "title": "Speed Demon"
+            }
+          ],
+          "call_duration_mins": 0,
+          "calls_made": 1,
+          "credits_invested": 102,
+          "emails_sent": 0,
+          "hold_time_avoided_mins": 0,
+          "obstacles_overcome": 0,
+          "silos_conquered": 1,
+          "time_saved_minutes": 5,
+          "web_tasks_completed": 0
+        }
+      },
+      "status": "failed"
+    },
+    "message_id": "816307447370104832",
+    "revision": "3009455",
+    "session_id": "1900000000000000001",
+    "type": "session:task_finished"
+  },
+  "type": "session:task_finished"
+}

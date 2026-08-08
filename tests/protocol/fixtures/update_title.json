@@ -1,0 +1,20 @@
+{
+  "metadata": {
+    "event_id": "5a5dbf54-9942-4211-a931-85f387877b82",
+    "group_id": "16148082-0774-4a01-a69d-10e4d427d8aa",
+    "is_volatile": false,
+    "source": {
+      "role": "agent",
+      "user_id": "100000000000000001"
+    },
+    "timestamp": "2026-08-08T13:50:37Z"
+  },
+  "payload": {
+    "data": {
+      "content": "Call to ask Saturday dinner time"
+    },
+    "session_id": "1900000000000000001",
+    "type": "session:update_title"
+  },
+  "type": "session:update_title"
+}
