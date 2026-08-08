@@ -1,16 +1,19 @@
 """Basic unit tests for pine-assistant package."""
 
 from pine_assistant import (
+    SUPPORTED_EVENTS,
     AsyncPineAI,
+    AuthError,
+    C2SEvent,
+    ConnectionError,
+    InputState,
+    InputStateCode,
     PineAI,
     PineAIError,
-    AuthError,
-    SessionError,
-    ConnectionError,
-    C2SEvent,
     S2CEvent,
+    SessionError,
+    is_supported_event,
 )
-from pine_assistant.models.events import NotificationEvent
 
 
 def test_public_exports():
@@ -38,4 +41,37 @@ def test_error_attributes():
 def test_event_constants():
     assert C2SEvent.SESSION_MESSAGE == "session:message"
     assert S2CEvent.SESSION_TEXT == "session:text"
-    assert NotificationEvent.NEW_MESSAGE == "notification:new_message"
+    assert S2CEvent.SESSION_LLM_THINKING == "session:llm_thinking"
+    assert S2CEvent.SESSION_TOOL_STATUS == "session:tool_status"
+
+
+def test_only_the_supported_surface_is_modelled():
+    """The event constants are the protocol scope, not an inventory of what the
+    server emits."""
+    assert len(list(S2CEvent)) == 19
+    assert set(C2SEvent) <= set(SUPPORTED_EVENTS)
+
+
+def test_is_supported_event_separates_the_two_surfaces():
+    assert is_supported_event("session:text")
+    assert is_supported_event("session:llm_thinking")
+    # Emitted by the server, and reachable — but not maintained.
+    assert not is_supported_event("session:work_log")
+    assert not is_supported_event("session:payment")
+    assert not is_supported_event("session:an_event_from_the_future")
+
+
+def test_input_state_reads_the_blocking_reason():
+    accepting = InputState(content="waiting_input")
+    assert accepting.accepting_input
+    assert not accepting.blocked
+
+    blocked = InputState(content="input_disabled", code=InputStateCode.TASK_READY)
+    assert blocked.blocked
+    assert blocked.awaiting_credits
+    assert not blocked.needs_phone_verification
+
+    unverified = InputState(
+        content="input_disabled", code=InputStateCode.PHONE_VERIFICATION_REQUIRED,
+    )
+    assert unverified.needs_phone_verification

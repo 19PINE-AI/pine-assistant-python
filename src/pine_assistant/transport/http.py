@@ -2,7 +2,7 @@
 REST HTTP client for Pine AI — spec sections 4.1, 4.3.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 
@@ -12,7 +12,7 @@ DEFAULT_BASE_URL = "https://www.19pine.ai"
 
 
 class HttpClient:
-    def __init__(self, base_url: str = DEFAULT_BASE_URL, token: Optional[str] = None):
+    def __init__(self, base_url: str = DEFAULT_BASE_URL, token: str | None = None):
         self._base_url = base_url.rstrip("/")
         self._token = token
         self._client = httpx.AsyncClient(
@@ -43,19 +43,19 @@ class HttpClient:
             raise PineAIError("http_error", f"HTTP {resp.status_code}: {resp.text[:200]}")
         return self._unwrap(resp.json())
 
-    async def post(self, path: str, body: Optional[dict[str, Any]] = None, authenticated: bool = True) -> Any:
+    async def post(self, path: str, body: dict[str, Any] | None = None, authenticated: bool = True) -> Any:
         resp = await self._client.post(path, json=body, headers=self._auth_headers(authenticated))
         if resp.status_code >= 400:
             raise PineAIError("http_error", f"HTTP {resp.status_code}: {resp.text[:200]}")
         return self._unwrap(resp.json())
 
-    async def put(self, path: str, body: Optional[dict[str, Any]] = None, authenticated: bool = True) -> Any:
+    async def put(self, path: str, body: dict[str, Any] | None = None, authenticated: bool = True) -> Any:
         resp = await self._client.put(path, json=body, headers=self._auth_headers(authenticated))
         if resp.status_code >= 400:
             raise PineAIError("http_error", f"HTTP {resp.status_code}: {resp.text[:200]}")
         return self._unwrap(resp.json())
 
-    async def delete(self, path: str, params: Optional[dict[str, str]] = None, authenticated: bool = True) -> Any:
+    async def delete(self, path: str, params: dict[str, str] | None = None, authenticated: bool = True) -> Any:
         resp = await self._client.delete(path, params=params, headers=self._auth_headers(authenticated))
         if resp.status_code >= 400:
             raise PineAIError("http_error", f"HTTP {resp.status_code}: {resp.text[:200]}")

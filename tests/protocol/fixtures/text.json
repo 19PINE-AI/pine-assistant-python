@@ -1,0 +1,23 @@
+{
+  "metadata": {
+    "event_id": "1206769d-e889-4161-b4df-c4f75d6f1414",
+    "group_id": "16148082-0774-4a01-a69d-10e4d427d8aa",
+    "is_volatile": false,
+    "source": {
+      "role": "agent",
+      "user_id": "100000000000000001"
+    },
+    "timestamp": "2026-08-08T13:51:26Z"
+  },
+  "payload": {
+    "data": {
+      "content": "I've placed the call to ask about Saturday's dinner start time! I'm waiting for the call to finish and will let you know what they say as soon as I have an update. \ud83d\udcde\ud83c\udf7d\ufe0f"
+    },
+    "message_id": "816306711211032576",
+    "revision": "3009124",
+    "session_id": "1900000000000000001",
+    "status": "delivered",
+    "type": "session:text"
+  },
+  "type": "session:text"
+}

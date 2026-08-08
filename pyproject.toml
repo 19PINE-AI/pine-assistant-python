@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pine-assistant"
-version = "0.3.3"
+version = "0.4.0"
 description = "Pine AI SDK — Let Pine AI handle your digital chores. Socket.IO + REST client."
 readme = "README.md"
 license = "MIT"
@@ -54,6 +54,11 @@ line-length = 120
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "UP", "B", "SIM"]
 ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/pine_assistant/models/__init__.py" = ["F403"]   # deliberate star re-export
+"src/pine_assistant/cli/main.py" = ["E402"]          # subcommands import after the group exists
+"tests/integration/*.py" = ["B017"]                  # a live server's failure type is not ours to pin
 
 [tool.ruff.lint.isort]
 known-first-party = ["pine_assistant"]

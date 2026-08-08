@@ -1,0 +1,25 @@
+{
+  "metadata": {
+    "event_id": "db97b41d-6d5f-44d7-9c9b-7b5bd66bbe5e",
+    "group_id": "16148082-0774-4a01-a69d-10e4d427d8aa",
+    "is_volatile": false,
+    "source": {
+      "role": "agent",
+      "user_id": "100000000000000001"
+    },
+    "timestamp": "2026-08-08T13:54:21Z"
+  },
+  "payload": {
+    "data": {
+      "final": true,
+      "turn_id": "503677ff-3c8c-4c16-8db0-3fa0285a9660",
+      "type": "turn_end"
+    },
+    "message_id": "816307447667900416",
+    "revision": "3009458",
+    "session_id": "1900000000000000001",
+    "status": "delivered",
+    "type": "session:llm_thinking"
+  },
+  "type": "session:llm_thinking"
+}

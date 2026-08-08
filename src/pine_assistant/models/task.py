@@ -1,111 +1,152 @@
 """
-Task models — spec 5.1.2 session:work_log, session:task_finished, session:task_ready.
+Task models — `session:task_ready`, `session:task_finished`, `session:tool_status`,
+`session:llm_thinking`, `session:restriction`, `session:required_action`.
 """
 
-from typing import Any, Optional
+from typing import Any
+
 from pydantic import BaseModel
 
 
 class TaskReadyData(BaseModel):
-    """session:task_ready payload"""
+    """`session:task_ready` payload.
+
+    Informational when the balance covers `required`; when it does not, the
+    session waits until the balance is restored.
+    """
     required: int = 0
-    suggested: Optional[int] = None
+    suggested: int | None = None
     confirmed: bool = False
-
-
-class WorkLogStep(BaseModel):
-    """Work log step — spec 5.1.2 session:work_log"""
-    id: str = ""
-    step_type: str = ""
-    step_title: str = ""
-    step_details: Optional[str] = None
-    status: str = ""
-    start_time: Optional[int] = None
-    data: Optional[dict[str, Any]] = None
-    can_retry: Optional[bool] = None
-    can_cancel: Optional[bool] = None
-    is_collapsed: Optional[bool] = None
-
-
-class WorkLogData(BaseModel):
-    """session:work_log payload.data"""
-    steps: list[WorkLogStep] = []
-
-
-class WorkLogPartData(BaseModel):
-    """session:work_log_part payload.data"""
-    step_id: str = ""
-    text_delta: Optional[str] = None
-    data_delta: Optional[dict[str, Any]] = None
-    status: Optional[str] = None
 
 
 class Achievement(BaseModel):
     id: str = ""
     title: str = ""
-    description: Optional[str] = None
-    icon_url: Optional[str] = None
-    rarity: Optional[str] = None
-    is_new: Optional[bool] = None
+    description: str | None = None
+    icon_url: str | None = None
+    rarity: str | None = None
+    is_new: bool | None = None
 
 
 class TaskCompletionSummary(BaseModel):
-    time_saved_minutes: Optional[int] = None
-    hold_time_avoided_mins: Optional[int] = None
-    calls_made: Optional[int] = None
-    call_duration_mins: Optional[int] = None
-    emails_sent: Optional[int] = None
-    web_tasks_completed: Optional[int] = None
-    money_saved: Optional[float] = None
-    money_saved_currency: Optional[str] = None
-    credits_invested: Optional[int] = None
-    achievements: Optional[list[Achievement]] = None
+    """Quantified outcome. `brief` is its only textual field."""
+    brief: str | None = None
+    time_saved_minutes: int | None = None
+    hold_time_avoided_mins: int | None = None
+    calls_made: int | None = None
+    call_duration_mins: int | None = None
+    emails_sent: int | None = None
+    web_tasks_completed: int | None = None
+    silos_conquered: int | None = None
+    obstacles_overcome: int | None = None
+    money_saved: float | None = None
+    money_saved_currency: str | None = None
+    credits_invested: int | None = None
+    achievements: list[Achievement] | None = None
 
 
 class TaskCompletion(BaseModel):
+    """The task's conclusion.
+
+    The textual result is `result_title`, `result_description` and
+    `outcome_narrative`; `summary` is quantified.
+    """
     result_title: str = ""
-    result_description: Optional[str] = None
-    summary: Optional[TaskCompletionSummary] = None
-    share_text: Optional[str] = None
-    engage_enabled: Optional[bool] = None
-    engage_prompt: Optional[str] = None
-    engage_status: Optional[str] = None
+    result_description: str | None = None
+    outcome_narrative: str | None = None
+    summary: TaskCompletionSummary | None = None
 
 
 class TaskFinishedData(BaseModel):
-    """session:task_finished payload.data"""
+    """`session:task_finished` payload."""
     status: str = ""
-    completion: Optional[TaskCompletion] = None
+    completion: TaskCompletion | None = None
 
 
-class ThinkingStep(BaseModel):
-    """session:thinking step"""
-    kind: str = ""
-    title: Optional[str] = None
-    status: Optional[str] = None
-    content: Optional[str] = None
-    thinking_data: Optional[dict[str, Any]] = None
+class ToolStatusSummary(BaseModel):
+    """Outcome of one tool operation. `text` is its only textual field."""
+    text: str | None = None
+    duration: int | None = None
+    actions_count: int | None = None
+    credits_consumed: int | None = None
 
 
-class InteractiveAuthData(BaseModel):
-    """session:interactive_auth_confirmation payload.data (S2C)"""
-    confirmation_id: Optional[str] = None
-    message_to_user: str = ""
-    verification_types: Optional[list[str]] = None
-    verification_guidance: Optional[dict[str, Any]] = None
-    scheduled_time: Optional[str] = None
-    scheduled_call_reminder: Optional[bool] = None
-    user_phone: Optional[str] = None
-    pine_caller_id: Optional[str] = None
-    caller_first_name: Optional[str] = None
-    caller_last_name: Optional[str] = None
-    expires_at: Optional[str] = None
+class ToolStatusData(BaseModel):
+    """`session:tool_status` payload — the record of one asynchronous operation.
+
+    Outbound calls are reported here: `target` is the number called, and the
+    duration, credits and textual outcome are on `summary`. Live updates reuse
+    the same `message_id`.
+
+    Distinct from the task-level result. A `tool_call` step in
+    `session:llm_thinking` describes the same operation and must not be
+    presented as a second entry.
+    """
+    operation_id: str = ""
+    tool_name: str | None = None
+    provider: str | None = None
+    target: str | None = None
+    start_time: str | None = None
+    status: str | None = None
+    summary: ToolStatusSummary | None = None
 
 
-class ThreeWayCallData(BaseModel):
-    """session:three_way_call payload.data"""
-    title: Optional[str] = None
-    content: Optional[str] = None
-    caller_id_number: Optional[str] = None
-    caller_first_name: Optional[str] = None
-    caller_last_name: Optional[str] = None
+class ToolCallHistoryEntry(BaseModel):
+    tool_name: str | None = None
+    status: str | None = None
+    title: str | None = None
+    content: str | None = None
+
+
+class LLMThinkingData(BaseModel):
+    """`session:llm_thinking` payload — reasoning and tool-call trace.
+
+    Search has no dedicated event; search activity appears here as a `tool_call`
+    step.
+    """
+    type: str = ""
+    title: str | None = None
+    content: str | None = None
+    tool_name: str | None = None
+    status: str | None = None
+    turn_id: str | None = None
+    thinking_id: str | None = None
+    final: bool = False
+    history: list[ToolCallHistoryEntry] | None = None
+
+
+class RestrictionData(BaseModel):
+    """`session:restriction` payload — the only statement that a task will not
+    complete."""
+    level: str = ""
+    reason: str | None = None
+    message: str | None = None
+
+
+class RequiredActionData(BaseModel):
+    """`session:required_action` payload — whether the session awaits a user
+    response."""
+    is_required_action: bool = False
+
+
+class MessageStatusData(BaseModel):
+    """`session:message_status` payload — the only means of telling a rejected
+    or rate-limited message from one still being processed."""
+    status: str = ""
+    message_id: str | None = None
+    request_id: str | None = None
+    reason: str | None = None
+    details: dict[str, Any] | None = None
+
+
+class RichContentData(BaseModel):
+    """`session:rich_content` payload — a structured document.
+
+    Its content is not repeated in `session:text`; ignoring this event loses the
+    content entirely.
+    """
+    title: str = ""
+    content: str = ""
+    subtitle: str | None = None
+    type: str | None = None
+    message_to_user: str | None = None

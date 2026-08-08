@@ -1,7 +1,6 @@
 """CLI: pine chat, pine send"""
 
 import json
-from typing import Optional
 
 import click
 from rich.console import Console
@@ -23,7 +22,7 @@ def _run(coro):
 
 @click.command("chat")
 @click.argument("session_id", required=False)
-def chat_cmd(session_id: Optional[str]):
+def chat_cmd(session_id: str | None):
     """Interactive chat with Pine AI."""
 
     async def _chat():
@@ -64,7 +63,7 @@ def chat_cmd(session_id: Optional[str]):
 @click.argument("message")
 @click.option("-s", "--session", "session_id", default=None)
 @click.option("--json-output", "--json", is_flag=True)
-def send_cmd(message: str, session_id: Optional[str], json_output: bool):
+def send_cmd(message: str, session_id: str | None, json_output: bool):
     """Send a one-shot message."""
 
     async def _send():

@@ -1,0 +1,24 @@
+{
+  "metadata": {
+    "event_id": "00000000-0000-4000-8000-670639217296",
+    "request_id": "00000000-0000-4000-8000-000000000001",
+    "timestamp": "2026-08-08T00:00:00Z",
+    "source": {
+      "role": "agent"
+    },
+    "is_volatile": false
+  },
+  "type": "session:rich_content",
+  "payload": {
+    "session_id": "1900000000000000001",
+    "message_id": "1900000000000000101",
+    "type": "session:rich_content",
+    "data": {
+      "title": "Plan comparison",
+      "subtitle": "3 providers",
+      "type": "report",
+      "message_to_user": "Here is what I found.",
+      "content": "## Findings\n\nDetails."
+    }
+  }
+}

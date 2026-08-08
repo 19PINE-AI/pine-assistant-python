@@ -1,0 +1,21 @@
+{
+  "metadata": {
+    "event_id": "6dc26984-1ba7-4503-bda8-d68a8d47c8d8",
+    "request_id": "58f1eabb-2459-46f1-86a2-59de5860103f",
+    "timestamp": "2026-08-08T13:50:34Z",
+    "source": {
+      "role": "system",
+      "user_id": "100000000000000001"
+    },
+    "is_volatile": false
+  },
+  "type": "session:history",
+  "payload": {
+    "session_id": "1900000000000000001",
+    "type": "session:history",
+    "data": {
+      "messages": null,
+      "order": "DESC"
+    }
+  }
+}

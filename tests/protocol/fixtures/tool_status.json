@@ -1,0 +1,31 @@
+{
+  "metadata": {
+    "event_id": "45094217-b50a-4e6c-82b4-9b3dd1990590",
+    "group_id": "16148082-0774-4a01-a69d-10e4d427d8aa",
+    "is_volatile": false,
+    "request_id": "e5ea2ed7-0496-4101-a5da-36e6ea259e04",
+    "source": {
+      "role": "agent",
+      "user_id": "100000000000000001"
+    },
+    "timestamp": "2026-08-08T13:51:23Z"
+  },
+  "payload": {
+    "data": {
+      "operation_id": "e617a8b3-ec57-4d1f-96f5-f6c1cc914cf8",
+      "provider": "Dinner Host / Event Contact (+15555550100)",
+      "start_time": "2026-08-08T13:51:22Z",
+      "status": "failed",
+      "summary": {
+        "text": "The call could not be completed successfully"
+      },
+      "target": "+15555550100",
+      "tool_name": "phone_call"
+    },
+    "message_id": "816306698405822464",
+    "revision": "3009123",
+    "session_id": "1900000000000000001",
+    "type": "session:tool_status"
+  },
+  "type": "session:tool_status"
+}

@@ -1,7 +1,5 @@
 """Unit tests for device_id resolution — env var, explicit arg, file persistence."""
 
-from pathlib import Path
-from unittest.mock import patch
 
 import pine_assistant.client as client_module
 from pine_assistant.client import _get_or_create_device_id

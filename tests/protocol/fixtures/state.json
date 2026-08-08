@@ -1,0 +1,18 @@
+{
+  "metadata": {
+    "event_id": "8435e63b-1066-4cd1-a484-355aed82cf73",
+    "is_volatile": false,
+    "source": {
+      "role": "system"
+    },
+    "timestamp": "2026-08-08T13:54:21Z"
+  },
+  "payload": {
+    "data": {
+      "content": "task_finished"
+    },
+    "session_id": "1900000000000000001",
+    "type": "session:state"
+  },
+  "type": "session:state"
+}

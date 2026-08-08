@@ -6,24 +6,28 @@ import asyncio
 import logging
 import os
 import uuid
+from collections.abc import AsyncGenerator, Callable
 from pathlib import Path
-from typing import Any, AsyncGenerator, Generator, Optional
+from typing import Any
 
-from pine_assistant.transport.http import HttpClient, DEFAULT_BASE_URL
-from pine_assistant.transport.socketio import SocketIOManager
 from pine_assistant.auth import Auth
-from pine_assistant.sessions import SessionsAPI
-from pine_assistant.chat import ChatEngine, ChatEvent
+from pine_assistant.chat import ChatEngine, ChatEvent, Deduplicator, event_from_envelope
 from pine_assistant.errors import ConnectionError
 from pine_assistant.models.events import C2SEvent
+from pine_assistant.sessions import SessionsAPI
+from pine_assistant.transport.http import DEFAULT_BASE_URL, HttpClient
+from pine_assistant.transport.socketio import SocketIOManager
 
 DEVICE_ID_FILE = Path.home() / ".pine" / "device_id"
 DEVICE_ID_ENV = "PINE_DEVICE_ID"
 
+HISTORY_PAGE_SIZE = 30
+HISTORY_MAX_BYTES = 5_242_880
+
 _logger = logging.getLogger(__name__)
 
 
-def _get_or_create_device_id(provided: Optional[str] = None) -> str:
+def _get_or_create_device_id(provided: str | None = None) -> str:
     """Resolve a stable device_id.
 
     Precedence: explicit argument → PINE_DEVICE_ID env var → ~/.pine/device_id
@@ -55,15 +59,18 @@ def _get_or_create_device_id(provided: Optional[str] = None) -> str:
 
 
 class AsyncPineAI:
-    """Async Pine AI client (primary)."""
+    """Async Pine AI client (primary).
+
+    A client tracks one session. Concurrent sessions need one client each.
+    """
 
     def __init__(
         self,
-        access_token: Optional[str] = None,
-        user_id: Optional[str] = None,
+        access_token: str | None = None,
+        user_id: str | None = None,
         base_url: str = DEFAULT_BASE_URL,
-        device_id: Optional[str] = None,
-        transports: Optional[list[str]] = None,
+        device_id: str | None = None,
+        transports: list[str] | None = None,
         ready_timeout: float = 15.0,
     ):
         self._base_url = base_url
@@ -77,14 +84,14 @@ class AsyncPineAI:
         self.auth = Auth(self.http)
         self.sessions = SessionsAPI(self.http)
 
-        self._sio: Optional[SocketIOManager] = None
-        self._chat: Optional[ChatEngine] = None
+        self._sio: SocketIOManager | None = None
+        self._chat: ChatEngine | None = None
 
     @property
     def connected(self) -> bool:
         return self._sio is not None and self._sio.connected
 
-    async def connect(self, access_token: Optional[str] = None, user_id: Optional[str] = None) -> None:
+    async def connect(self, access_token: str | None = None, user_id: str | None = None) -> None:
         token = access_token or self._access_token
         uid = user_id or self._user_id
         if not token or not uid:
@@ -109,49 +116,98 @@ class AsyncPineAI:
             self._chat = None
 
     async def join_session(self, session_id: str) -> dict[str, Any]:
-        """Join a session room — must be called before chatting."""
+        """Enter a session — must be called before chatting.
+
+        The join carries `since_revision` "0" and its incremental-sync fields
+        are ignored. Call `rebuild()` after joining to load the session's
+        messages; a join alone does not deliver them.
+        """
         self._ensure_connected()
         return await self._chat.join_session(session_id)  # type: ignore[union-attr]
 
     def leave_session(self, session_id: str) -> None:
-        """Leave a session room when done."""
+        """Leave a session room.
+
+        Room management, outside the supported protocol scope.
+        """
         self._ensure_connected()
         self._chat.leave_session(session_id)  # type: ignore[union-attr]
 
+    def on_reconnect(self, handler: Callable[[], None]) -> Callable[[], None]:
+        """Register a callback fired after a reconnect re-joins its sessions.
+
+        Rebuild from `rebuild()` when it fires: a connection can stay open after
+        delivery has stopped, so anything accumulated before it is unreliable.
+        """
+        self._ensure_connected()
+        return self._sio.add_reconnect_handler(handler)  # type: ignore[union-attr]
+
     async def get_history(
-        self, session_id: str, max_messages: int = 30, order: str = "desc",
-        from_message_id: Optional[str] = None, request_work_log: bool = False,
+        self, session_id: str, max_messages: int = HISTORY_PAGE_SIZE, order: str = "desc",
+        from_message_id: str | None = None,
     ) -> dict[str, Any]:
-        """Fetch message history — spec 5.1.1 session:history."""
+        """Fetch one page of persisted messages.
+
+        A short or empty page does not mean the range is exhausted — only an
+        absent `next_message_id` does. Use `rebuild()` unless you are paging
+        deliberately.
+        """
         self._ensure_connected()
         return await self._sio.emit_and_wait(  # type: ignore[union-attr]
             C2SEvent.SESSION_HISTORY,
             {
                 "max_messages": max_messages,
-                "max_bytes": 5_242_880,
+                "max_bytes": HISTORY_MAX_BYTES,
                 "order": order,
                 "from_message_id": from_message_id,
-                "request_work_log": request_work_log,
             },
             session_id=session_id,
         )
+
+    async def rebuild(
+        self, session_id: str, *, page_size: int = HISTORY_PAGE_SIZE, max_pages: int = 100,
+    ) -> list[dict[str, Any]]:
+        """Rebuild a session's messages from history, unconditionally.
+
+        This is the recovery mechanism: run it on every join and every
+        reconnect, and whenever a tracked session has been silent for an
+        extended period. Paging stops only when the cursor is exhausted.
+
+        Messages of every type are returned, including ones outside the
+        supported scope; filtering is the caller's to do.
+        """
+        messages: list[dict[str, Any]] = []
+        cursor: str | None = None
+        for _ in range(max_pages):
+            page = await self.get_history(session_id, max_messages=page_size, from_message_id=cursor)
+            messages.extend(page.get("messages") or [])
+            cursor = page.get("next_message_id") or None
+            if not cursor:
+                return messages
+        _logger.warning(
+            "rebuild(%s) stopped at the %d-page limit with the cursor still open; "
+            "the returned history is incomplete.", session_id, max_pages,
+        )
+        return messages
 
     async def chat(
         self,
         session_id: str,
         content: str,
         *,
-        attachments: Optional[list[dict[str, Any]]] = None,
-        referenced_sessions: Optional[list[dict[str, str]]] = None,
-        action: Optional[dict[str, Any]] = None,
+        attachments: list[dict[str, Any]] | None = None,
+        referenced_sessions: list[dict[str, str]] | None = None,
     ) -> AsyncGenerator[ChatEvent, None]:
-        """Send a message and yield buffered events."""
+        """Send a message and yield the events that follow.
+
+        Events the SDK does not recognise are yielded unchanged alongside the
+        rest; ignore what you do not handle.
+        """
         self._ensure_connected()
         async for event in self._chat.chat(  # type: ignore[union-attr]
             session_id, content,
             attachments=attachments,
             referenced_sessions=referenced_sessions,
-            action=action,
         ):
             yield event
 
@@ -160,9 +216,8 @@ class AsyncPineAI:
         session_id: str,
         content: str,
         *,
-        attachments: Optional[list[dict[str, Any]]] = None,
-        referenced_sessions: Optional[list[dict[str, str]]] = None,
-        action: Optional[dict[str, Any]] = None,
+        attachments: list[dict[str, Any]] | None = None,
+        referenced_sessions: list[dict[str, str]] | None = None,
     ) -> None:
         """Send a message without waiting for events (fire-and-forget)."""
         self._ensure_connected()
@@ -170,7 +225,6 @@ class AsyncPineAI:
             session_id, content,
             attachments=attachments,
             referenced_sessions=referenced_sessions,
-            action=action,
         )
 
     async def listen(self, session_id: str) -> AsyncGenerator[ChatEvent, None]:
@@ -183,24 +237,22 @@ class AsyncPineAI:
         """Persistent event stream for a session — yields events indefinitely.
 
         Unlike listen(), this never terminates on terminal states or timeouts.
-        Designed for bidirectional REPL use where sending and receiving are
+        Designed for bidirectional use where sending and receiving are
         concurrent.
         """
         self._ensure_connected()
         queue: asyncio.Queue[ChatEvent] = asyncio.Queue()
+        dedup = Deduplicator()
 
         def _handler(event_type: str, raw: dict[str, Any]) -> None:
-            payload = raw.get("payload", {})
+            payload = raw.get("payload") or {}
             p_sid = payload.get("session_id")
             if p_sid and p_sid != session_id:
                 return
-            queue.put_nowait(ChatEvent(
-                type=event_type,
-                session_id=session_id,
-                message_id=payload.get("message_id"),
-                data=payload.get("data"),
-                metadata=raw.get("metadata"),
-            ))
+            event = event_from_envelope(event_type, raw, session_id)
+            if dedup.is_duplicate(event):
+                return
+            queue.put_nowait(event)
 
         remove = self._sio.add_event_handler(_handler)  # type: ignore[union-attr]
         try:
@@ -224,28 +276,30 @@ class AsyncPineAI:
             self.leave_session(sid)
 
     def send_form_response(self, session_id: str, message_id: str, form_data: dict[str, Any]) -> None:
-        """Submit a form response."""
+        """Answer a `session:form_to_user` request.
+
+        Submit only values the user supplied. The format has no representation
+        for refusal and an empty submission is indistinguishable from empty
+        answers, so a fabricated answer may be acted on. Sending nothing is
+        safe.
+        """
         self._ensure_connected()
         self._chat.send_form_response(session_id, message_id, form_data)  # type: ignore[union-attr]
 
-    def send_auth_confirmation(self, session_id: str, message_id: str, data: dict[str, Any]) -> None:
-        """Submit an interactive auth confirmation (OTP, etc)."""
-        self._ensure_connected()
-        self._chat.send_auth_confirmation(session_id, message_id, data)  # type: ignore[union-attr]
+    def emit_event(
+        self, event_type: str, data: Any, session_id: str, message_id: str | None = None,
+    ) -> None:
+        """Send an arbitrary event, enveloped but otherwise unprocessed.
 
-    def send_location_response(self, session_id: str, message_id: str, latitude: str, longitude: str) -> None:
-        """Submit a location response."""
+        The escape hatch for the unsupported surface. Anything sent through it
+        may stop working without notice and without a version change.
+        """
         self._ensure_connected()
-        self._chat.send_location_response(session_id, message_id, latitude, longitude)  # type: ignore[union-attr]
-
-    def send_location_selection(self, session_id: str, message_id: str, places: list[dict[str, Any]]) -> None:
-        """Submit a location selection."""
-        self._ensure_connected()
-        self._chat.send_location_selection(session_id, message_id, places)  # type: ignore[union-attr]
+        self._sio.emit(event_type, data, session_id, message_id)  # type: ignore[union-attr]
 
     @staticmethod
     def session_url(session_id: str) -> str:
-        """Build the Pine AI web app URL for a session (for payment)."""
+        """Build the Pine AI web app URL for a session."""
         return f"https://www.19pine.ai/app/chat/{session_id}"
 
     def _ensure_connected(self) -> None:
@@ -290,14 +344,16 @@ class PineAI:
     def get_history(self, session_id: str, **kwargs: Any) -> dict[str, Any]:
         return self._run(self._async.get_history(session_id, **kwargs))
 
+    def rebuild(self, session_id: str, **kwargs: Any) -> list[dict[str, Any]]:
+        return self._run(self._async.rebuild(session_id, **kwargs))
+
     def chat_sync(
         self,
         session_id: str,
         content: str,
         *,
-        attachments: Optional[list[dict[str, Any]]] = None,
-        referenced_sessions: Optional[list[dict[str, str]]] = None,
-        action: Optional[dict[str, Any]] = None,
+        attachments: list[dict[str, Any]] | None = None,
+        referenced_sessions: list[dict[str, str]] | None = None,
     ) -> list[ChatEvent]:
         """Send a message and return all events as a list (blocking)."""
         async def _collect() -> list[ChatEvent]:
@@ -306,7 +362,6 @@ class PineAI:
                 session_id, content,
                 attachments=attachments,
                 referenced_sessions=referenced_sessions,
-                action=action,
             ):
                 events.append(event)
             return events
@@ -317,28 +372,22 @@ class PineAI:
         session_id: str,
         content: str,
         *,
-        attachments: Optional[list[dict[str, Any]]] = None,
-        referenced_sessions: Optional[list[dict[str, str]]] = None,
-        action: Optional[dict[str, Any]] = None,
+        attachments: list[dict[str, Any]] | None = None,
+        referenced_sessions: list[dict[str, str]] | None = None,
     ) -> None:
         """Send a message without waiting for events (fire-and-forget)."""
         self._async.send_message(
             session_id, content,
             attachments=attachments,
             referenced_sessions=referenced_sessions,
-            action=action,
         )
 
     def send_form_response(self, session_id: str, message_id: str, form_data: dict[str, Any]) -> None:
         self._async.send_form_response(session_id, message_id, form_data)
 
-    def send_auth_confirmation(self, session_id: str, message_id: str, data: dict[str, Any]) -> None:
-        self._async.send_auth_confirmation(session_id, message_id, data)
-
-    def send_location_response(self, session_id: str, message_id: str, latitude: str, longitude: str) -> None:
-        self._async.send_location_response(session_id, message_id, latitude, longitude)
-
-    def send_location_selection(self, session_id: str, message_id: str, places: list[dict[str, Any]]) -> None:
-        self._async.send_location_selection(session_id, message_id, places)
+    def emit_event(
+        self, event_type: str, data: Any, session_id: str, message_id: str | None = None,
+    ) -> None:
+        self._async.emit_event(event_type, data, session_id, message_id)
 
     session_url = staticmethod(AsyncPineAI.session_url)
