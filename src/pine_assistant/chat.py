@@ -11,7 +11,6 @@ from collections.abc import AsyncGenerator, Callable, Coroutine
 from typing import Any
 
 from pine_assistant.models.events import C2SEvent, S2CEvent
-from pine_assistant.models.session import ACCEPTING_INPUT
 from pine_assistant.transport.socketio import SocketIOManager
 
 TERMINAL_STATES = {"task_finished", "task_cancelled", "task_stale"}
@@ -30,7 +29,6 @@ SUBSTANTIVE_EVENTS = frozenset({
     S2CEvent.SESSION_TEXT_PART,
     S2CEvent.SESSION_RICH_CONTENT,
     S2CEvent.SESSION_FORM_TO_USER,
-    S2CEvent.SESSION_TASK_READY,
     S2CEvent.SESSION_TASK_FINISHED,
     S2CEvent.SESSION_TOOL_STATUS,
     S2CEvent.SESSION_RESTRICTION,
@@ -202,10 +200,6 @@ class ChatEngine:
             if event in SUBSTANTIVE_EVENTS:
                 received_agent_response = True
             data = payload.get("data")
-            if (event == S2CEvent.SESSION_INPUT_STATE and isinstance(data, dict)
-                    and data.get("content") == ACCEPTING_INPUT and received_agent_response):
-                done = True
-                queue.put_nowait(None)
             if (event == S2CEvent.SESSION_STATE and isinstance(data, dict)
                     and data.get("content", "") in TERMINAL_STATES):
                 done = True

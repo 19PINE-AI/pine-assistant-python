@@ -19,7 +19,6 @@ from pine_assistant.models.events import (
     S2CEvent,
     is_supported_event,
 )
-from pine_assistant.models.session import InputState, InputStateCode
 from pine_assistant.sessions import SessionsAPI
 
 __version__ = "0.4.0"
@@ -37,6 +36,4 @@ __all__ = [
     "S2CEvent",
     "SUPPORTED_EVENTS",
     "is_supported_event",
-    "InputState",
-    "InputStateCode",
 ]

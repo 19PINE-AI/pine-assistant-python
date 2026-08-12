@@ -1,22 +1,11 @@
 """
-Task models — `session:task_ready`, `session:task_finished`, `session:tool_status`,
-`session:llm_thinking`, `session:restriction`, `session:required_action`.
+Task models — `session:task_finished`, `session:tool_status`,
+`session:llm_thinking`, `session:restriction`.
 """
 
 from typing import Any
 
 from pydantic import BaseModel
-
-
-class TaskReadyData(BaseModel):
-    """`session:task_ready` payload.
-
-    Informational when the balance covers `required`; when it does not, the
-    session waits until the balance is restored.
-    """
-    required: int = 0
-    suggested: int | None = None
-    confirmed: bool = False
 
 
 class Achievement(BaseModel):
@@ -121,12 +110,6 @@ class RestrictionData(BaseModel):
     level: str = ""
     reason: str | None = None
     message: str | None = None
-
-
-class RequiredActionData(BaseModel):
-    """`session:required_action` payload — whether the session awaits a user
-    response."""
-    is_required_action: bool = False
 
 
 class MessageStatusData(BaseModel):

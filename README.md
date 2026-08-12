@@ -72,9 +72,7 @@ payloads, and semantics change compatibly or with notice.
 | Event | What it is for |
 |---|---|
 | `session:state` | Where the task stands in its lifecycle |
-| `session:input_state` | Whether input is accepted, and the reason when it is not. This is where a blocked session says why |
 | `session:message_status` | What became of a message you sent — the only way to tell a rejected or rate-limited one from one still being worked on |
-| `session:required_action` | Whether the session is waiting on you |
 | `session:update_title` | The session title, as the agent revises it |
 | `session:restriction` | An account restriction. The only statement that a task will not complete |
 
@@ -88,7 +86,6 @@ payloads, and semantics change compatibly or with notice.
 
 | Event | What it is for |
 |---|---|
-| `session:task_ready` | What the task will cost in credits, and whether it is authorised. When the balance covers it the server starts the task itself and this is informational; when it does not, the session waits |
 | `session:task_finished` | The result. `completion.result_title`, `result_description` and `outcome_narrative` carry the text; `completion.summary` is quantified, and `brief` is its only prose |
 | `session:tool_status` | The record of one asynchronous operation. An outbound call reports here: the number, the duration, the credits, and `summary.text`. It updates in place, reusing its `message_id`, so expect several with the same one |
 
@@ -170,26 +167,35 @@ has stopped.
 `rebuild()` returns messages of every type, including unsupported ones.
 Filtering them is yours to do.
 
-## Blocked sessions
+## When a session cannot proceed
 
-When the composer is disabled, `session:input_state` carries the reason. Read it
-from there rather than inferring it from which events did or did not arrive.
+`session:state` reports where the task stands, and several of its values say
+that nothing further will arrive until something changes outside the session:
 
 ```python
-from pine_assistant import InputState, S2CEvent
+from pine_assistant import S2CEvent
 
-if event.type == S2CEvent.SESSION_INPUT_STATE:
-    state = InputState.model_validate(event.data)
-    if state.awaiting_credits:
-        ...   # cost is on session:task_ready; retry once the balance is restored
-    if state.needs_phone_verification:
-        ...   # no in-session remedy
+if event.type == S2CEvent.SESSION_STATE:
+    state = (event.data or {}).get("content")
+    if state in ("credits_exhausted", "task_paused"):
+        ...   # waiting on the account, not on the agent
+    if state in ("task_finished", "task_cancelled"):
+        ...   # the task is over
 ```
 
-An expired session has no reason code of its own — it presents only as a
-disabled composer. Expiry is the `is_stale` field on the session object, over
-REST. On finding one expired, create a new session and reference the old one in
-your first message:
+Two more events state a stop outright:
+
+```python
+if event.type == S2CEvent.SESSION_RESTRICTION:
+    ...   # an account restriction — the task will not complete
+if event.type == S2CEvent.SESSION_ERROR:
+    ...   # the only channel for server-reported failures
+```
+
+An expired session is read over REST, from the `is_stale` field on the session
+object — expiry is a property of the session, not one of its states. On finding
+one expired, create a new session and reference the old one in your first
+message:
 
 ```python
 new = await client.sessions.create()
@@ -202,7 +208,8 @@ Two conditions have no remedy once a session is running:
 
 - **Metered billing.** The account must be billed against a credit balance. On
   the alternative path a session halts at a payment step the SDK cannot answer.
-- **Phone verification.** Must be completed at provisioning time.
+- **Phone verification.** Must be completed at provisioning time. It has no
+  in-session remedy and no in-session signal.
 
 ## Attachments
 

@@ -6,8 +6,6 @@ from pine_assistant import (
     AuthError,
     C2SEvent,
     ConnectionError,
-    InputState,
-    InputStateCode,
     PineAI,
     PineAIError,
     S2CEvent,
@@ -48,7 +46,7 @@ def test_event_constants():
 def test_only_the_supported_surface_is_modelled():
     """The event constants are the protocol scope, not an inventory of what the
     server emits."""
-    assert len(list(S2CEvent)) == 19
+    assert len(list(S2CEvent)) == 16
     assert set(C2SEvent) <= set(SUPPORTED_EVENTS)
 
 
@@ -59,19 +57,3 @@ def test_is_supported_event_separates_the_two_surfaces():
     assert not is_supported_event("session:work_log")
     assert not is_supported_event("session:payment")
     assert not is_supported_event("session:an_event_from_the_future")
-
-
-def test_input_state_reads_the_blocking_reason():
-    accepting = InputState(content="waiting_input")
-    assert accepting.accepting_input
-    assert not accepting.blocked
-
-    blocked = InputState(content="input_disabled", code=InputStateCode.TASK_READY)
-    assert blocked.blocked
-    assert blocked.awaiting_credits
-    assert not blocked.needs_phone_verification
-
-    unverified = InputState(
-        content="input_disabled", code=InputStateCode.PHONE_VERIFICATION_REQUIRED,
-    )
-    assert unverified.needs_phone_verification
