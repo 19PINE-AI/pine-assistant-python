@@ -43,9 +43,7 @@ class S2CEvent(StrEnum):
 
     # Session state
     SESSION_STATE = "session:state"
-    SESSION_INPUT_STATE = "session:input_state"
     SESSION_MESSAGE_STATUS = "session:message_status"
-    SESSION_REQUIRED_ACTION = "session:required_action"
     SESSION_UPDATE_TITLE = "session:update_title"
     SESSION_RESTRICTION = "session:restriction"
 
@@ -53,7 +51,6 @@ class S2CEvent(StrEnum):
     SESSION_FORM_TO_USER = "session:form_to_user"
 
     # Task and result
-    SESSION_TASK_READY = "session:task_ready"
     SESSION_TASK_FINISHED = "session:task_finished"
     SESSION_TOOL_STATUS = "session:tool_status"
 

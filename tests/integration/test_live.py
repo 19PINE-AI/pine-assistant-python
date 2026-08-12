@@ -13,7 +13,7 @@ import os
 
 import pytest
 
-from pine_assistant import AsyncPineAI, InputState, S2CEvent, is_supported_event
+from pine_assistant import AsyncPineAI, S2CEvent, is_supported_event
 
 SKIP = not os.environ.get("PINE_INTEGRATION")
 ACCESS_TOKEN = os.environ.get("PINE_ACCESS_TOKEN", "")
@@ -123,19 +123,6 @@ class TestSupportedSurface:
         messages = await client.rebuild(sid)
         assert isinstance(messages, list)
         assert messages, "history came back empty after a turn"
-
-    async def test_input_state_reports_whether_the_composer_is_open(self, session):
-        client, sid = session
-        states = [
-            InputState.model_validate(e.data)
-            async for e in client.chat(sid, PROMPT)
-            if e.type == S2CEvent.SESSION_INPUT_STATE and isinstance(e.data, dict)
-        ]
-        assert states, "no session:input_state during a turn"
-        # Whatever the value, a blocked composer must name its reason.
-        for state in states:
-            if state.blocked:
-                assert state.code or state.detail
 
 
 class TestErrors:

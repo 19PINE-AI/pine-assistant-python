@@ -14,11 +14,6 @@
     "recorded_at": "2026-08-08T13:55:16+00:00",
     "source": "recorded"
   },
-  "session:input_state": {
-    "derived_from": null,
-    "recorded_at": "2026-08-08T13:55:16+00:00",
-    "source": "recorded"
-  },
   "session:join": {
     "derived_from": null,
     "recorded_at": "2026-08-08T13:55:16+00:00",
@@ -39,11 +34,6 @@
     "recorded_at": "2026-08-08T13:55:16+00:00",
     "source": "recorded"
   },
-  "session:required_action": {
-    "derived_from": null,
-    "recorded_at": "2026-08-08T13:48:53+00:00",
-    "source": "recorded"
-  },
   "session:restriction": {
     "derived_from": "the server's protocol definition",
     "recorded_at": null,
@@ -60,11 +50,6 @@
     "source": "recorded"
   },
   "session:task_finished": {
-    "derived_from": null,
-    "recorded_at": "2026-08-08T13:55:16+00:00",
-    "source": "recorded"
-  },
-  "session:task_ready": {
     "derived_from": null,
     "recorded_at": "2026-08-08T13:55:16+00:00",
     "source": "recorded"

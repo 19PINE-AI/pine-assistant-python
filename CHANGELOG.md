@@ -15,18 +15,14 @@ guarantee. What the SDK models is now that subset and nothing else.
 
 - `is_supported_event()` and `SUPPORTED_EVENTS` — whether an event carries the
   guarantee.
-- `session:llm_thinking`, `session:tool_status`, `session:required_action` and
-  `session:restriction`, with models. All four are in the supported scope and
-  none were modelled before; `session:tool_status` is where an outbound call
-  reports its number, duration, credits, and textual outcome.
+- `session:llm_thinking`, `session:tool_status` and `session:restriction`, with
+  models. None were modelled before; `session:tool_status` is where an outbound
+  call reports its number, duration, credits, and textual outcome.
 - `AsyncPineAI.rebuild()` — pages through history until the cursor is
   exhausted. Recovery is an unconditional rebuild: joining never resumes from a
   cursor, and a short or empty page does not mean a range is done.
 - `AsyncPineAI.on_reconnect()` — fires after a reconnect has re-joined, so
   callers can rebuild. A connection can stay open after delivery has stopped.
-- `InputState` with `awaiting_credits` and `needs_phone_verification`. A
-  blocking condition is read from `session:input_state`, because the events that
-  elaborate on one are mostly outside the scope.
 - `AsyncPineAI.emit_event()` — the escape hatch for sending anything outside the
   supported surface.
 - Protocol fixtures and contract tests under `tests/protocol`, and
@@ -68,6 +64,14 @@ untouched — the SDK just no longer models it. Send with `emit_event()`.
 - Wall-clock filtering of events older than the moment a turn began. It
   contradicts rebuilding from history, and a clock offset made it drop real
   events.
+- `session:input_state`, `session:required_action` and `session:task_ready`,
+  with the `InputState`, `InputStateCode`, `RequiredActionData` and
+  `TaskReadyData` models. The scope no longer covers them. A session stopped on
+  its credit balance is reported by `session:state`, whose values include
+  `credits_exhausted` and `task_paused`.
+- The turn no longer ends when `session:input_state` reports that input is
+  accepted. That event is observed to arrive before the agent has said
+  anything, so ending on it truncates the reply.
 
 ## [0.3.3] - 2026-05-23
 

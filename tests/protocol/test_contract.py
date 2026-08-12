@@ -6,9 +6,8 @@ reachable. A failure here means a payload shape moved.
 
 A fixture records a shape, not a scenario. Whichever instance a recording
 happened to catch is the one checked in — `session:state` may hold "chat" rather
-than a terminal state, `session:input_state` an open composer rather than a
-blocked one. Assertions here stay on what every instance carries; a specific
-condition is constructed by the test that needs it.
+than a terminal state. Assertions here stay on what every instance carries; a
+specific condition is constructed by the test that needs it.
 """
 
 import json
@@ -20,15 +19,12 @@ from pine_assistant.chat import event_from_envelope
 from pine_assistant.models.envelope import MessageEnvelope
 from pine_assistant.models.events import SUPPORTED_EVENTS, S2CEvent
 from pine_assistant.models.form import FormToUserData
-from pine_assistant.models.session import InputState, InputStateCode
 from pine_assistant.models.task import (
     LLMThinkingData,
     MessageStatusData,
-    RequiredActionData,
     RestrictionData,
     RichContentData,
     TaskFinishedData,
-    TaskReadyData,
     ToolStatusData,
 )
 from pine_assistant.transport.envelope import parse_envelope
@@ -130,27 +126,6 @@ def test_tool_status_on_a_completed_call_quantifies_it():
     assert data.summary.credits_consumed
 
 
-def test_input_state_reports_the_composer_and_its_reason():
-    """Blocked or not, the reason is on the event — never inferred from which
-    other events arrived."""
-    data = InputState.model_validate(load_fixture("input_state")["payload"]["data"])
-    assert data.content
-    assert data.accepting_input is not data.blocked
-    if data.blocked:
-        assert data.code or data.detail
-
-
-def test_input_state_codes_name_the_two_conditions_worth_handling():
-    """Constructed, not recorded: an ordinary session reaches neither."""
-    awaiting = InputState(content="input_disabled", code=InputStateCode.TASK_READY)
-    assert awaiting.awaiting_credits and not awaiting.needs_phone_verification
-
-    unverified = InputState(
-        content="input_disabled", code=InputStateCode.PHONE_VERIFICATION_REQUIRED,
-    )
-    assert unverified.needs_phone_verification and not unverified.awaiting_credits
-
-
 def test_llm_thinking_is_typed():
     """A reasoning step always declares its type. Search has no event of its
     own — it appears here as a `tool_call` step, whose fields are pinned below."""
@@ -189,20 +164,6 @@ def test_restriction_states_the_task_will_not_complete():
     data = RestrictionData.model_validate(load_fixture("restriction")["payload"]["data"])
     assert data.level
     assert data.message
-
-
-def test_required_action_reports_whether_a_response_is_awaited():
-    data = RequiredActionData.model_validate(load_fixture("required_action")["payload"]["data"])
-    assert data.is_required_action is True
-
-
-def test_task_ready_carries_the_credit_cost():
-    """`confirmed` is the authorization state, not a request for one: when the
-    balance covers `required` the server starts the task itself and this event
-    is informational. It waits only when the balance does not."""
-    data = TaskReadyData.model_validate(load_fixture("task_ready")["payload"]["data"])
-    assert data.required > 0
-    assert isinstance(data.confirmed, bool)
 
 
 def test_form_to_user_carries_its_fields():
