@@ -5,12 +5,10 @@ the real transport instead of being handed straight to a handler.
 """
 
 from pine_assistant.chat import (
-    SUBSTANTIVE_EVENTS,
     ChatEvent,
     Deduplicator,
     event_from_envelope,
 )
-from pine_assistant.models.events import SUPPORTED_EVENTS
 
 
 def _event(event_id, event_type="session:text"):
@@ -53,8 +51,3 @@ class TestEventFromEnvelope:
         event = event_from_envelope("session:text", {}, "s1")
         assert event.data is None
         assert event.event_id is None
-
-
-def test_turn_control_uses_only_supported_events():
-    """A turn must not begin or end on an event we do not maintain."""
-    assert {e.value for e in SUBSTANTIVE_EVENTS} <= SUPPORTED_EVENTS

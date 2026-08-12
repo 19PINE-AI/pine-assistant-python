@@ -197,17 +197,23 @@ class AsyncPineAI:
         *,
         attachments: list[dict[str, Any]] | None = None,
         referenced_sessions: list[dict[str, str]] | None = None,
+        turn_timeout: float | None = None,
     ) -> AsyncGenerator[ChatEvent, None]:
         """Send a message and yield the events that follow.
 
         Events the SDK does not recognise are yielded unchanged alongside the
         rest; ignore what you do not handle.
+
+        `turn_timeout` bounds the call in wall-clock seconds, keeping whatever
+        arrived before it elapsed. Without one, a turn the session never closes
+        is waited on indefinitely.
         """
         self._ensure_connected()
         async for event in self._chat.chat(  # type: ignore[union-attr]
             session_id, content,
             attachments=attachments,
             referenced_sessions=referenced_sessions,
+            turn_timeout=turn_timeout,
         ):
             yield event
 
@@ -227,10 +233,14 @@ class AsyncPineAI:
             referenced_sessions=referenced_sessions,
         )
 
-    async def listen(self, session_id: str) -> AsyncGenerator[ChatEvent, None]:
+    async def listen(
+        self, session_id: str, turn_timeout: float | None = None,
+    ) -> AsyncGenerator[ChatEvent, None]:
         """Listen for events on a joined session without sending a message."""
         self._ensure_connected()
-        async for event in self._chat._listen(session_id):  # type: ignore[union-attr]
+        async for event in self._chat._listen(  # type: ignore[union-attr]
+            session_id, turn_timeout=turn_timeout,
+        ):
             yield event
 
     async def subscribe(self, session_id: str) -> AsyncGenerator[ChatEvent, None]:
@@ -354,6 +364,7 @@ class PineAI:
         *,
         attachments: list[dict[str, Any]] | None = None,
         referenced_sessions: list[dict[str, str]] | None = None,
+        turn_timeout: float | None = None,
     ) -> list[ChatEvent]:
         """Send a message and return all events as a list (blocking)."""
         async def _collect() -> list[ChatEvent]:
@@ -362,6 +373,7 @@ class PineAI:
                 session_id, content,
                 attachments=attachments,
                 referenced_sessions=referenced_sessions,
+                turn_timeout=turn_timeout,
             ):
                 events.append(event)
             return events

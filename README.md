@@ -25,7 +25,8 @@ session = await client.sessions.create()
 await client.join_session(session["id"])
 await client.rebuild(session["id"])          # load the session's messages
 
-async for event in client.chat(session["id"], "Negotiate my Comcast bill"):
+async for event in client.chat(session["id"], "Negotiate my Comcast bill",
+                               turn_timeout=120):
     print(event.type, event.data)
 
 await client.disconnect()
@@ -98,6 +99,31 @@ A turn commonly delivers `session:text_part` alone: the composer reopens once
 the agent has finished speaking, and the complete `session:text` is the durable
 record, read back from history. Assemble the parts by `message_id` rather than
 waiting for the complete message to arrive live.
+
+## When a turn ends
+
+`chat()` yields until the agent has spoken and then gone quiet — two seconds of
+silence following text, a form, or a document. Silence following anything else
+is read as work still running: an agent that says "placing the call now" and
+starts a call is not finished, and the wait stays long.
+
+A turn also ends when `session:state` settles — `task_finished`,
+`task_cancelled`, `credits_exhausted` or `task_paused`. The last two stop on the
+account rather than on the agent.
+
+Nothing else ends a turn, so a turn whose last event is neither content nor a
+settled state waits. Pass `turn_timeout` to bound it in wall-clock seconds;
+whatever arrived before the deadline is still yielded.
+
+```python
+async for event in client.chat(sid, "...", turn_timeout=120):
+    ...
+```
+
+Without `turn_timeout` a turn is waited on indefinitely. Note also that a task
+outlives the turn that started it: an outbound call reports through
+`session:tool_status` minutes after `chat()` has returned, which `subscribe()`
+is for.
 
 ## Everything else passes through
 

@@ -13,6 +13,9 @@ guarantee. What the SDK models is now that subset and nothing else.
 
 ### Added
 
+- `turn_timeout` on `chat()`, `listen()` and `chat_sync()` — a wall-clock bound
+  on one turn, keeping whatever arrived before it elapsed. It defaults to none,
+  which leaves a turn waiting indefinitely on a session that never closes it.
 - `is_supported_event()` and `SUPPORTED_EVENTS` — whether an event carries the
   guarantee.
 - `session:llm_thinking`, `session:tool_status` and `session:restriction`, with
@@ -31,6 +34,16 @@ guarantee. What the SDK models is now that subset and nothing else.
 
 ### Changed
 
+- A turn now ends when the agent has spoken and then gone quiet, rather than
+  when it has spoken at some point during the turn. The old rule set a flag on
+  the first reply and never cleared it, so the rest of the turn ran on the
+  two-second timeout — including a tool call, where silence means the work is
+  taking a while. `session:tool_status` is no longer counted as speech for this
+  purpose: it reports what the agent is doing, not what it says.
+- `session:state` values `credits_exhausted` and `task_paused` now end a turn.
+  Both stop on the account rather than on the agent, so nothing further arrives
+  from the session. `task_stale` is dropped from that set: the server has no
+  such state, and staleness is `is_stale` on the session object over REST.
 - `session:join` now carries `since_revision` "0", on first join and on
   reconnect. The incremental-synchronization fields in the response are ignored.
 - Events are deduplicated on the event identifier together with the message

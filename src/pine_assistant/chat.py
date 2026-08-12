@@ -7,13 +7,24 @@ response, and what gets deduplicated are all decided from scope events.
 """
 
 import asyncio
+import time
 from collections.abc import AsyncGenerator, Callable, Coroutine
 from typing import Any
 
 from pine_assistant.models.events import C2SEvent, S2CEvent
 from pine_assistant.transport.socketio import SocketIOManager
 
-TERMINAL_STATES = {"task_finished", "task_cancelled", "task_stale"}
+# States in which nothing further arrives until something changes outside the
+# session. `task_stale` was in this set and is not a state the server has —
+# staleness is `is_stale` on the session object, read over REST.
+SETTLED_STATES = frozenset({
+    "task_finished",
+    "task_cancelled",
+    # The task stopped on the account rather than on the agent. It can resume,
+    # but not from anything a client sends into the session.
+    "credits_exhausted",
+    "task_paused",
+})
 DEFAULT_IDLE_TIMEOUT_S = 120.0
 DEFAULT_RESPONSE_IDLE_TIMEOUT_S = 2.0
 
@@ -22,15 +33,16 @@ DEFAULT_RESPONSE_IDLE_TIMEOUT_S = 2.0
 # rebuild is not.
 FULL_REBUILD_REVISION = "0"
 
-# An agent response, for the purpose of deciding a turn has begun. Scope events
-# only — a turn must not hinge on an event we do not maintain.
-SUBSTANTIVE_EVENTS = frozenset({
+# What the agent says, as opposed to what it does. A turn is over when the
+# agent has spoken and then gone quiet; while it is working, silence means the
+# work is taking a while. Scope events only — no timing may hinge on an event
+# we do not maintain.
+CONTENT_EVENTS = frozenset({
     S2CEvent.SESSION_TEXT,
     S2CEvent.SESSION_TEXT_PART,
     S2CEvent.SESSION_RICH_CONTENT,
     S2CEvent.SESSION_FORM_TO_USER,
     S2CEvent.SESSION_TASK_FINISHED,
-    S2CEvent.SESSION_TOOL_STATUS,
     S2CEvent.SESSION_RESTRICTION,
 })
 
@@ -141,6 +153,7 @@ class ChatEngine:
         *,
         attachments: list[dict[str, Any]] | None = None,
         referenced_sessions: list[dict[str, str]] | None = None,
+        turn_timeout: float | None = None,
     ) -> AsyncGenerator[ChatEvent, None]:
         """Send a message and yield the events that follow."""
         self._sio.emit(
@@ -148,7 +161,9 @@ class ChatEngine:
             self._build_message_data(content, attachments, referenced_sessions),
             session_id,
         )
-        async for event in self._listen(session_id, _skip_state_precheck=True):
+        async for event in self._listen(
+            session_id, turn_timeout=turn_timeout, _skip_state_precheck=True,
+        ):
             yield event
 
     def send_message(
@@ -167,13 +182,19 @@ class ChatEngine:
         )
 
     async def _listen(
-        self, session_id: str, *, _skip_state_precheck: bool = False,
+        self, session_id: str, *, turn_timeout: float | None = None,
+        _skip_state_precheck: bool = False,
     ) -> AsyncGenerator[ChatEvent, None]:
-        """Yield events for a session until the turn ends."""
+        """Yield events for a session until the turn ends.
+
+        `turn_timeout` bounds the whole call in wall-clock seconds. Without one
+        a turn ends only when the session says so, and a session that says
+        nothing is waited on indefinitely.
+        """
         if not _skip_state_precheck and self._check_session_state:
             try:
                 session = await self._check_session_state(session_id)
-                if session.get("state") in TERMINAL_STATES:
+                if session.get("state") in SETTLED_STATES:
                     yield ChatEvent(type=S2CEvent.SESSION_STATE, session_id=session_id,
                                     data={"content": session["state"]})
                     return
@@ -183,10 +204,14 @@ class ChatEngine:
         queue: asyncio.Queue[ChatEvent | None] = asyncio.Queue()
         dedup = Deduplicator()
         done = False
-        received_agent_response = False
+        # Whether the most recent event was the agent speaking, which is what
+        # makes a silence meaningful. Re-evaluated on every event: a single
+        # flag, set once and never cleared, put the whole rest of the turn on
+        # the short timeout — including a tool call, where silence is expected.
+        spoke_last = False
 
         def handler(event: str, raw: dict[str, Any]) -> None:
-            nonlocal done, received_agent_response
+            nonlocal done, spoke_last
             payload = raw.get("payload") or {}
             p_session_id = payload.get("session_id")
             if p_session_id and p_session_id != session_id:
@@ -197,28 +222,35 @@ class ChatEngine:
                 return
             queue.put_nowait(chat_event)
 
-            if event in SUBSTANTIVE_EVENTS:
-                received_agent_response = True
+            spoke_last = event in CONTENT_EVENTS
             data = payload.get("data")
             if (event == S2CEvent.SESSION_STATE and isinstance(data, dict)
-                    and data.get("content", "") in TERMINAL_STATES):
+                    and data.get("content", "") in SETTLED_STATES):
                 done = True
                 queue.put_nowait(None)
 
         remove_handler = self._sio.add_event_handler(handler)
+        deadline = None if turn_timeout is None else time.monotonic() + turn_timeout
 
         try:
             while not done:
-                timeout = self._response_idle_timeout_s if received_agent_response else self._idle_timeout_s
+                timeout = self._response_idle_timeout_s if spoke_last else self._idle_timeout_s
+                if deadline is not None:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        break
+                    timeout = min(timeout, remaining)
                 try:
                     evt = await asyncio.wait_for(queue.get(), timeout=timeout)
                 except asyncio.TimeoutError:
-                    if received_agent_response:
+                    if deadline is not None and time.monotonic() >= deadline:
+                        break
+                    if spoke_last:
                         break
                     if self._check_session_state:
                         try:
                             session = await self._check_session_state(session_id)
-                            if session.get("state") in TERMINAL_STATES:
+                            if session.get("state") in SETTLED_STATES:
                                 yield ChatEvent(type=S2CEvent.SESSION_STATE, session_id=session_id,
                                                 data={"content": session["state"]})
                                 break
