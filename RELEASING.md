@@ -30,3 +30,7 @@ It installs, imports, builds, and verifies the package across Python 3.10 – 3.
    git push && git push --tags
    ```
 3. The `publish.yml` workflow triggers on the `v*` tag, runs CI first, then publishes to PyPI.
+
+The workflow refuses a tag that disagrees with either file. PyPI will not let a
+version be replaced once uploaded, so a tag naming one version while the package
+declares another cannot be corrected in place — only yanked and re-cut.
