@@ -12,6 +12,10 @@ DEFAULT_BASE_URL = "https://www.19pine.ai"
 DEFAULT_API_BASE_PATH = "/api"
 _USER_AGENT = "pine-assistant-sdk"
 
+# Public HTTPX timeout inputs accepted by both sync and async clients.  HTTPX's
+# internal ``TimeoutTypes`` alias is not exported in every supported release.
+TimeoutConfig = httpx.Timeout | float | None | tuple[float] | tuple[float, float] | tuple[float, float, float] | tuple[float, float, float, float]
+
 
 def _api_url(base_url: str, api_base_path: str) -> str:
     if not base_url:
@@ -66,7 +70,7 @@ class HttpClient:
         api_base_path: str = DEFAULT_API_BASE_PATH,
         client: httpx.AsyncClient | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
-        timeout: httpx.TimeoutTypes = 30.0,
+        timeout: TimeoutConfig = 30.0,
     ):
         if client is not None and transport is not None:
             raise ValueError("pass either client or transport, not both")
@@ -169,7 +173,7 @@ class SyncHttpClient:
         api_base_path: str = DEFAULT_API_BASE_PATH,
         client: httpx.Client | None = None,
         transport: httpx.BaseTransport | None = None,
-        timeout: httpx.TimeoutTypes = 30.0,
+        timeout: TimeoutConfig = 30.0,
     ) -> None:
         if client is not None and transport is not None:
             raise ValueError("pass either client or transport, not both")
