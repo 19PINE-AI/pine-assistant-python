@@ -10,12 +10,14 @@ from collections.abc import AsyncGenerator, Callable
 from pathlib import Path
 from typing import Any
 
-from pine_assistant.auth import Auth
+import httpx
+
+from pine_assistant.auth import Auth, SyncAuth
 from pine_assistant.chat import ChatEngine, ChatEvent, Deduplicator, event_from_envelope
 from pine_assistant.errors import ConnectionError
 from pine_assistant.models.events import C2SEvent
-from pine_assistant.sessions import SessionsAPI
-from pine_assistant.transport.http import DEFAULT_BASE_URL, HttpClient
+from pine_assistant.sessions import SessionsAPI, SyncSessionsAPI
+from pine_assistant.transport.http import DEFAULT_API_BASE_PATH, DEFAULT_BASE_URL, HttpClient, SyncHttpClient
 from pine_assistant.transport.socketio import SocketIOManager
 
 DEVICE_ID_FILE = Path.home() / ".pine" / "device_id"
@@ -72,6 +74,10 @@ class AsyncPineAI:
         device_id: str | None = None,
         transports: list[str] | None = None,
         ready_timeout: float = 15.0,
+        *,
+        api_base_path: str = DEFAULT_API_BASE_PATH,
+        http_client: httpx.AsyncClient | None = None,
+        http_transport: httpx.AsyncBaseTransport | None = None,
     ):
         self._base_url = base_url
         self._access_token = access_token
@@ -80,7 +86,13 @@ class AsyncPineAI:
         self._transports = transports
         self._ready_timeout = ready_timeout
 
-        self.http = HttpClient(base_url=base_url, token=access_token)
+        self.http = HttpClient(
+            base_url=base_url,
+            token=access_token,
+            api_base_path=api_base_path,
+            client=http_client,
+            transport=http_transport,
+        )
         self.auth = Auth(self.http)
         self.sessions = SessionsAPI(self.http)
 
@@ -90,6 +102,12 @@ class AsyncPineAI:
     @property
     def connected(self) -> bool:
         return self._sio is not None and self._sio.connected
+
+    async def __aenter__(self) -> "AsyncPineAI":
+        return self
+
+    async def __aexit__(self, *_exc_info: object) -> None:
+        await self.aclose()
 
     async def connect(self, access_token: str | None = None, user_id: str | None = None) -> None:
         token = access_token or self._access_token
@@ -106,14 +124,22 @@ class AsyncPineAI:
             transports=self._transports,
             ready_timeout=self._ready_timeout,
         )
-        self._chat = ChatEngine(self._sio, check_session_state=self.sessions.get)
+        self._chat = ChatEngine(self._sio, check_session_state=self._session_state)
         await self._sio.connect()
 
     async def disconnect(self) -> None:
+        """Disconnect real-time Socket.IO only; the REST client stays usable."""
         if self._sio:
             await self._sio.disconnect()
             self._sio = None
             self._chat = None
+
+    async def aclose(self) -> None:
+        """Release Socket.IO and SDK-owned HTTP resources, even if either fails."""
+        try:
+            await self.disconnect()
+        finally:
+            await self.http.close()
 
     async def join_session(self, session_id: str) -> dict[str, Any]:
         """Enter a session — must be called before chatting.
@@ -316,90 +342,46 @@ class AsyncPineAI:
         if not self._chat or not self._sio or not self._sio.connected:
             raise ConnectionError("Not connected. Call connect() first.")
 
+    async def _session_state(self, session_id: str) -> dict[str, Any]:
+        """Adapt the typed REST resource to the legacy realtime pre-check."""
+        return (await self.sessions.get(session_id)).model_dump()
+
 
 class PineAI:
-    """Sync wrapper around AsyncPineAI. Runs the event loop internally."""
+    """Synchronous Pine REST client.
 
-    def __init__(self, **kwargs: Any):
-        self._async = AsyncPineAI(**kwargs)
-        self._loop = asyncio.new_event_loop()
+    REST resources return concrete values through ``httpx.Client``. Real-time
+    Socket.IO requires an event loop and is intentionally available only on
+    :class:`AsyncPineAI`; this client does not create a hidden loop or thread.
+    """
 
-    def _run(self, coro: Any) -> Any:
-        return self._loop.run_until_complete(coro)
-
-    @property
-    def auth(self) -> Auth:
-        return self._async.auth
-
-    @property
-    def sessions(self) -> SessionsAPI:
-        return self._async.sessions
-
-    @property
-    def connected(self) -> bool:
-        return self._async.connected
-
-    def connect(self, **kwargs: Any) -> None:
-        self._run(self._async.connect(**kwargs))
-
-    def disconnect(self) -> None:
-        self._run(self._async.disconnect())
-
-    def join_session(self, session_id: str) -> dict[str, Any]:
-        return self._run(self._async.join_session(session_id))
-
-    def leave_session(self, session_id: str) -> None:
-        self._async.leave_session(session_id)
-
-    def get_history(self, session_id: str, **kwargs: Any) -> dict[str, Any]:
-        return self._run(self._async.get_history(session_id, **kwargs))
-
-    def rebuild(self, session_id: str, **kwargs: Any) -> list[dict[str, Any]]:
-        return self._run(self._async.rebuild(session_id, **kwargs))
-
-    def chat_sync(
+    def __init__(
         self,
-        session_id: str,
-        content: str,
+        access_token: str | None = None,
+        base_url: str = DEFAULT_BASE_URL,
         *,
-        attachments: list[dict[str, Any]] | None = None,
-        referenced_sessions: list[dict[str, str]] | None = None,
-        turn_timeout: float | None = None,
-    ) -> list[ChatEvent]:
-        """Send a message and return all events as a list (blocking)."""
-        async def _collect() -> list[ChatEvent]:
-            events = []
-            async for event in self._async.chat(
-                session_id, content,
-                attachments=attachments,
-                referenced_sessions=referenced_sessions,
-                turn_timeout=turn_timeout,
-            ):
-                events.append(event)
-            return events
-        return self._run(_collect())
-
-    def send_message(
-        self,
-        session_id: str,
-        content: str,
-        *,
-        attachments: list[dict[str, Any]] | None = None,
-        referenced_sessions: list[dict[str, str]] | None = None,
+        api_base_path: str = DEFAULT_API_BASE_PATH,
+        http_client: httpx.Client | None = None,
+        http_transport: httpx.BaseTransport | None = None,
     ) -> None:
-        """Send a message without waiting for events (fire-and-forget)."""
-        self._async.send_message(
-            session_id, content,
-            attachments=attachments,
-            referenced_sessions=referenced_sessions,
+        self.http = SyncHttpClient(
+            base_url=base_url,
+            token=access_token,
+            api_base_path=api_base_path,
+            client=http_client,
+            transport=http_transport,
         )
+        self.auth = SyncAuth(self.http)
+        self.sessions = SyncSessionsAPI(self.http)
 
-    def send_form_response(self, session_id: str, message_id: str, form_data: dict[str, Any]) -> None:
-        self._async.send_form_response(session_id, message_id, form_data)
+    def __enter__(self) -> "PineAI":
+        return self
 
-    def emit_event(
-        self, event_type: str, data: Any, session_id: str, message_id: str | None = None,
-    ) -> None:
-        self._async.emit_event(event_type, data, session_id, message_id)
+    def __exit__(self, *_exc_info: object) -> None:
+        self.close()
+
+    def close(self) -> None:
+        """Close the SDK-owned synchronous HTTP client."""
+        self.http.close()
 
     session_url = staticmethod(AsyncPineAI.session_url)

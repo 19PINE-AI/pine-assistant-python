@@ -76,12 +76,12 @@ class TestSessionLifecycle:
         assert created["state"] == "init"
 
         listed = await client.sessions.list(limit=50)
-        assert sid in [s["id"] for s in listed["sessions"]]
+        assert sid in [s.id for s in listed.sessions]
 
         fetched = await client.sessions.get(sid)
-        assert fetched["id"] == sid
+        assert fetched.id == sid
         # Expiry lives here and nowhere on the Socket.IO surface.
-        assert "is_stale" in fetched
+        assert isinstance(fetched.is_stale, bool)
 
         await client.sessions.delete(sid)
 

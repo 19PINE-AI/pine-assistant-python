@@ -19,20 +19,51 @@ pip install pine-assistant[cli]     # SDK + CLI
 from pine_assistant import AsyncPineAI
 
 client = AsyncPineAI(access_token="...", user_id="...")
-await client.connect()
+async with client:
+    await client.connect()
 
-session = await client.sessions.create()
-await client.join_session(session["id"])
-await client.rebuild(session["id"])          # load the session's messages
+    session = await client.sessions.create()
+    await client.join_session(session["id"])
+    await client.rebuild(session["id"])          # load the session's messages
 
-async for event in client.chat(session["id"], "Negotiate my Comcast bill",
-                               turn_timeout=120):
-    print(event.type, event.data)
-
-await client.disconnect()
+    async for event in client.chat(session["id"], "Negotiate my Comcast bill",
+                                   turn_timeout=120):
+        print(event.type, event.data)
 ```
 
 A client tracks one session. Concurrent sessions need one client each.
+
+`disconnect()` only ends the real-time connection. `aclose()` (including the
+end of `async with`) also releases the SDK-owned HTTP client. If you pass an
+`httpx.AsyncClient`, it remains your responsibility to close it. Use
+`api_base_path` to select an API prefix; it defaults to `/api` for compatibility.
+
+## REST identity and sessions
+
+```python
+async with AsyncPineAI(access_token="...") as client:
+    identity = await client.auth.me()               # AuthIdentity(user_id="...")
+    sessions = await client.sessions.list(limit=20) # SessionListResponse
+    session = await client.sessions.get("123")     # SessionInfo
+```
+
+The list call sends `ensure_copilot=false` by default. It is read-only when
+used with a backend that supports this query option; older backends may ignore
+it and retain their legacy Copilot behavior.
+
+## Quick Start (Sync REST)
+
+`PineAI` is a synchronous REST client. It returns values directly for auth and
+session resources; use `AsyncPineAI` for Socket.IO and streaming.
+
+```python
+from pine_assistant import PineAI
+
+with PineAI(access_token="...") as client:
+    print(client.auth.me().user_id)
+    for session in client.sessions.list(limit=20).sessions:
+        print(session.id, session.title)
+```
 
 ## Quick Start (CLI)
 

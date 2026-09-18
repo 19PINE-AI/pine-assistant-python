@@ -1,7 +1,5 @@
 """CLI: pine sessions list|create|delete"""
 
-import json
-
 import click
 from rich.console import Console
 from rich.table import Table
@@ -40,15 +38,15 @@ def sessions_list(state, limit, json_output):
         client = _get_client()
         result = await client.sessions.list(state=state, limit=limit)
         if json_output:
-            click.echo(json.dumps(result, indent=2))
+            click.echo(result.model_dump_json(indent=2))
             return
-        table = Table(title=f"Sessions ({result['total']} total)")
+        table = Table(title=f"Sessions ({result.total} total)")
         table.add_column("ID", style="bold")
         table.add_column("State")
         table.add_column("Title")
         table.add_column("Updated")
-        for s in result["sessions"]:
-            table.add_row(s["id"], s["state"], s.get("title", ""), s.get("updated_at", ""))
+        for s in result.sessions:
+            table.add_row(s.id, s.state, s.title, s.updated_at)
         console.print(table)
 
     _run(_list())

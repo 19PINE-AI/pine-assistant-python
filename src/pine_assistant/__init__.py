@@ -9,24 +9,33 @@ verbatim but carry no compatibility guarantee: tolerate them, do not depend on
 them. `is_supported_event` tells the two apart.
 """
 
-from pine_assistant.auth import Auth
+from pine_assistant.auth import Auth, SyncAuth
 from pine_assistant.chat import ChatEvent
 from pine_assistant.client import AsyncPineAI, PineAI
 from pine_assistant.errors import AuthError, ConnectionError, PineAIError, SessionError
+from pine_assistant.models.auth import AuthIdentity, AuthTicket, RedeemedTicket
 from pine_assistant.models.events import (
     SUPPORTED_EVENTS,
     C2SEvent,
     S2CEvent,
     is_supported_event,
 )
-from pine_assistant.sessions import SessionsAPI
+from pine_assistant.models.session import SessionInfo, SessionListResponse
+from pine_assistant.sessions import SessionsAPI, SyncSessionsAPI
 
-__version__ = "0.4.0"
+__version__ = "0.5.0rc1"
 __all__ = [
     "PineAI",
     "AsyncPineAI",
     "Auth",
+    "SyncAuth",
     "SessionsAPI",
+    "SyncSessionsAPI",
+    "AuthIdentity",
+    "AuthTicket",
+    "RedeemedTicket",
+    "SessionInfo",
+    "SessionListResponse",
     "ChatEvent",
     "PineAIError",
     "AuthError",
