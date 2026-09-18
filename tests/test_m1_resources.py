@@ -241,6 +241,155 @@ def test_sync_client_preserves_the_session_url_utility():
 
 
 @pytest.mark.asyncio
+async def test_async_session_message_serializes_supported_fields_and_preserves_statuses():
+    requests = []
+    statuses = iter(["received", "delivered", "delivery_failed"])
+
+    async def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json=success({
+            "message_id": "18", "request_id": "click-18", "status": next(statuses), "revision": "24",
+        }))
+
+    async with AsyncPineAI(
+        access_token="user", base_url="https://pine.test", http_transport=httpx.MockTransport(handler),
+    ) as client:
+        sent = []
+        for _ in range(3):
+            sent.append(await client.sessions.send_message(
+                7,
+                "Continue",
+                type="plain_text",
+                action={"action_type": "engage_call", "payload": {"number": "555"}},
+                attachments=[{"id": "upload-1"}],
+                library_artifact_ids=["artifact-1"],
+                referenced_sessions=[{"session_id": "6", "title": "Earlier work"}],
+                quote={"text": "The prior quote"},
+                client_now_date="2026-09-18",
+                request_id="click-18",
+            ))
+
+    assert [result.status for result in sent] == ["received", "delivered", "delivery_failed"]
+    assert all((result.message_id, result.request_id, result.revision) == ("18", "click-18", "24") for result in sent)
+    assert len(requests) == 3
+    assert all(request.method == "POST" and request.url.path == "/api/v2/sessions/7/messages" for request in requests)
+    assert all(request.headers["X-Request-ID"] == "click-18" for request in requests)
+    assert json.loads(requests[0].content) == {
+        "content": "Continue",
+        "type": "plain_text",
+        "action": {"action_type": "engage_call", "payload": {"number": "555"}},
+        "attachments": [{"id": "upload-1"}],
+        "library_artifact_ids": ["artifact-1"],
+        "referenced_sessions": [{"session_id": "6", "title": "Earlier work"}],
+        "quote": {"text": "The prior quote"},
+        "client_now_date": "2026-09-18",
+    }
+
+
+@pytest.mark.asyncio
+async def test_async_session_outcomes_preserve_the_full_page_and_cursor():
+    async def handler(request):
+        assert request.url.path == "/api/v2/sessions/7/outcomes"
+        assert dict(request.url.params) == {"limit": "2", "before": "18"}
+        return httpx.Response(200, json=success({
+            "items": [{
+                "outcome_id": "17", "session_id": "7", "kind": "positive", "importance": "major",
+                "milestone_fact": "A call was booked", "evidence_excerpts": ["confirmed"], "brief": "Booked.",
+                "story_description": "Pine called the provider.", "outcome_narrative": "Pine booked the call.",
+                "share_draft": "Call booked", "engage_prompt": "Discuss the booking",
+                "engage_call_objective": "Explain the confirmation", "estimated_time_saved_min": 12,
+                "previous_briefs": ["Earlier update"], "created_at": "2026-09-18T01:02:03Z",
+                "rating": {"stars": 5, "reasons": ["clear"], "comment": "thanks", "rated_at": "2026-09-18T02:03:04Z"},
+                "source": "agent", "type": "session:outcome_updated", "id": "17",
+            }],
+            "next_cursor": "17", "total": 3,
+        }))
+
+    async with AsyncPineAI(base_url="https://pine.test", http_transport=httpx.MockTransport(handler)) as client:
+        page = await client.sessions.outcomes("7", limit=2, before=18)
+
+    outcome = page.items[0]
+    assert (page.next_cursor, page.total) == ("17", 3)
+    assert outcome.outcome_narrative == "Pine booked the call."
+    assert outcome.rating and outcome.rating.stars == 5
+    assert outcome.model_extra == {"source": "agent", "type": "session:outcome_updated", "id": "17"}
+
+
+@pytest.mark.asyncio
+async def test_session_message_errors_keep_codes_and_sanitize_input_state_without_retrying():
+    attempts = 0
+
+    async def conflict_handler(_request):
+        nonlocal attempts
+        attempts += 1
+        return httpx.Response(409, json={
+            "status": "error",
+            "data": {"content": "input disabled", "detail": "task is processing", "code": "task_processing"},
+            "debug": "sensitive upstream body",
+        })
+
+    async with AsyncPineAI(base_url="https://pine.test", http_transport=httpx.MockTransport(conflict_handler)) as client:
+        with pytest.raises(SessionError) as excinfo:
+            await client.sessions.send_message("7", "Continue")
+    assert attempts == 1
+    assert excinfo.value.status_code == 409
+    assert excinfo.value.code == "task_processing"
+    assert excinfo.value.details == {"input_state": {
+        "content": "input disabled", "detail": "task is processing", "code": "task_processing",
+    }}
+    assert "sensitive" not in str(excinfo.value)
+
+    async def timeout_handler(_request):
+        nonlocal attempts
+        attempts += 1
+        raise httpx.ReadTimeout("sensitive request URL")
+
+    async with AsyncPineAI(base_url="https://pine.test", http_transport=httpx.MockTransport(timeout_handler)) as client:
+        with pytest.raises(SessionError) as timeout:
+            await client.sessions.send_message("7", "Continue")
+    assert attempts == 2
+    assert timeout.value.code == "timeout"
+    assert "sensitive" not in str(timeout.value)
+
+
+def test_sync_session_send_and_outcomes_match_async_rest_contract():
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        if request.url.path.endswith("/messages"):
+            return httpx.Response(200, json=success({
+                "message_id": "18", "request_id": "sync-18", "status": "delivered", "revision": "24",
+            }))
+        return httpx.Response(200, json=success({
+            "items": [{"outcome_id": "17", "session_id": "7", "milestone_fact": "Booked", "created_at": "now"}],
+            "total": 1,
+        }))
+
+    with PineAI(access_token="user", base_url="https://pine.test", http_transport=httpx.MockTransport(handler)) as client:
+        sent = client.sessions.send_message("7", "Continue", request_id="sync-18")
+        page = client.sessions.outcomes("7")
+
+    assert (sent.status, sent.message_id, sent.revision) == ("delivered", "18", "24")
+    assert page.items[0].milestone_fact == "Booked"
+    assert requests[0].headers["X-Request-ID"] == "sync-18"
+    assert json.loads(requests[0].content) == {"content": "Continue"}
+    assert dict(requests[1].url.params) == {"limit": "20"}
+
+
+@pytest.mark.parametrize("session_id", [0, "bad", True])
+def test_session_message_and_outcomes_validate_session_ids(session_id):
+    client = PineAI(base_url="https://pine.test", http_transport=httpx.MockTransport(lambda _request: None))
+    try:
+        with pytest.raises(ValueError):
+            client.sessions.send_message(session_id, "Continue")
+        with pytest.raises(ValueError):
+            client.sessions.outcomes(session_id)
+    finally:
+        client.close()
+
+
+@pytest.mark.asyncio
 async def test_upload_uses_multipart_content_type(tmp_path):
     attachment = tmp_path / "note.txt"
     attachment.write_text("hello")

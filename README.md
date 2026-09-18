@@ -51,6 +51,51 @@ The list call sends `ensure_copilot=false` by default. It is read-only when
 used with a backend that supports this query option; older backends may ignore
 it and retain their legacy Copilot behavior.
 
+Use `sessions.send_message()` when an application needs the REST write
+acknowledgement without joining Socket.IO. It returns a typed status: `received`
+means the message was persisted, `delivered` means it was handed to the Agent,
+and `delivery_failed` means that handoff failed. None means that a task has
+finished. A timeout or connection error leaves persistence unknown, so the SDK
+never retries a send; recover Socket history before deciding what to do next.
+
+```python
+status = await client.sessions.send_message(
+    "123", "Continue the task", request_id="ui-click-42",
+)
+if status.status == "delivered":
+    print(status.message_id, status.revision)
+
+outcomes = await client.sessions.outcomes("123")
+for outcome in outcomes.items:
+    print(outcome.outcome_id, outcome.outcome_narrative)
+```
+
+`outcomes()` returns newest-first persisted Outcomes. Follow `next_cursor` to
+request older pages with `before=...`; `total` is a first-page snapshot and is
+not a pagination signal.
+
+For structured form answers, use the async method on a connected client:
+
+```python
+await client.connect()
+try:
+    receipt = await client.submit_form_response(
+        "123", "456", {"contact_name": "Example User"},
+    )
+finally:
+    await client.disconnect()
+```
+
+The method re-reads the original agent form from authenticated history, preserves
+its message and request IDs, validates visible required fields, and JSON-encodes
+array answers like the web app. Callers cannot override field privacy levels.
+`delivered` requires the persisted reply and its delivery receipt; `received` or
+`unknown` requires checking history before deciding whether to submit again.
+A transport ACK is not a delivery receipt. The legacy synchronous
+`send_form_response()` is deprecated: it cannot recover the original request ID
+and is rejected by backends enforcing strict form correlation. Migrate callers to
+`await submit_form_response()` before rolling out that backend validation.
+
 ## Quick Start (Sync REST)
 
 `PineAI` is a synchronous REST client. It returns values directly for auth and

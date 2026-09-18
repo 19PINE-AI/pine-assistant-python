@@ -20,7 +20,14 @@ from pine_assistant.models.events import (
     S2CEvent,
     is_supported_event,
 )
-from pine_assistant.models.session import SessionInfo, SessionListResponse
+from pine_assistant.models.session import (
+    SessionInfo,
+    SessionListResponse,
+    SessionMessageStatus,
+    SessionOutcome,
+    SessionOutcomeRating,
+    SessionOutcomesPage,
+)
 from pine_assistant.sessions import SessionsAPI, SyncSessionsAPI
 
 __version__ = "0.5.0rc1"
@@ -36,6 +43,10 @@ __all__ = [
     "RedeemedTicket",
     "SessionInfo",
     "SessionListResponse",
+    "SessionMessageStatus",
+    "SessionOutcome",
+    "SessionOutcomeRating",
+    "SessionOutcomesPage",
     "ChatEvent",
     "PineAIError",
     "AuthError",

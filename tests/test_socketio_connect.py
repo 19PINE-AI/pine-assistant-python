@@ -104,7 +104,7 @@ async def test_connect_error_without_payload_falls_back_to_generic():
         pytest.raises(PineConnectionError) as excinfo,
     ):
         await mgr.connect()
-    assert "transport closed" in str(excinfo.value)
+    assert str(excinfo.value) == "Socket.IO connect failed"
 
 
 class _SilentStallClient:

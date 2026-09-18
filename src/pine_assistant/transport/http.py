@@ -46,11 +46,34 @@ def _error_code(response: httpx.Response) -> str:
     return "http_error"
 
 
+def _input_state_details(response: httpx.Response) -> dict[str, Any] | None:
+    """Return the bounded, public shape of a session-message input conflict.
+
+    The message endpoint is unusual: its 409 uses the normal error status but
+    puts the state gate in ``data`` rather than an error body.  Preserve only
+    that documented DTO, never an arbitrary upstream response body.
+    """
+    if response.status_code != 409:
+        return None
+    try:
+        payload = response.json()
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(payload, dict) or payload.get("status") != "error":
+        return None
+    data = payload.get("data")
+    if not isinstance(data, dict) or not isinstance(data.get("content"), str):
+        return None
+    input_state = {key: data[key] for key in ("content", "detail", "code") if isinstance(data.get(key), str)}
+    return {"input_state": input_state}
+
+
 def _json_data(response: httpx.Response) -> Any:
     if not 200 <= response.status_code < 300:
         raise PineAIError(
             _error_code(response),
             f"Pine API request failed with HTTP {response.status_code}",
+            _input_state_details(response),
             status_code=response.status_code,
         )
     if response.status_code == 204:
@@ -114,9 +137,12 @@ class HttpClient:
         authenticated: bool = True,
         token: str | None = None,
         files: Any = None,
+        extra_headers: dict[str, str] | None = None,
     ) -> Any:
         actual_token = self._token if token is None else token
         headers = self._auth_headers(authenticated, token)
+        if extra_headers:
+            headers.update(extra_headers)
         if files is not None:
             # httpx must generate the multipart boundary itself.
             headers.pop("Content-Type", None)
@@ -142,8 +168,10 @@ class HttpClient:
         return await self._request("GET", path, authenticated=authenticated, token=token, params=params)
 
     async def post(self, path: str, body: dict[str, Any] | None = None, authenticated: bool = True,
-                   *, token: str | None = None) -> Any:
-        return await self._request("POST", path, body=body, authenticated=authenticated, token=token)
+                   *, token: str | None = None, headers: dict[str, str] | None = None) -> Any:
+        return await self._request(
+            "POST", path, body=body, authenticated=authenticated, token=token, extra_headers=headers,
+        )
 
     async def put(self, path: str, body: dict[str, Any] | None = None, authenticated: bool = True,
                   *, token: str | None = None) -> Any:
@@ -215,9 +243,12 @@ class SyncHttpClient:
         authenticated: bool = True,
         token: str | None = None,
         files: Any = None,
+        extra_headers: dict[str, str] | None = None,
     ) -> Any:
         actual_token = self._token if token is None else token
         headers = self._auth_headers(authenticated, token)
+        if extra_headers:
+            headers.update(extra_headers)
         if files is not None:
             headers.pop("Content-Type", None)
         try:
@@ -240,8 +271,10 @@ class SyncHttpClient:
         return self._request("GET", path, authenticated=authenticated, token=token, params=params)
 
     def post(self, path: str, body: dict[str, Any] | None = None, authenticated: bool = True,
-             *, token: str | None = None) -> Any:
-        return self._request("POST", path, body=body, authenticated=authenticated, token=token)
+             *, token: str | None = None, headers: dict[str, str] | None = None) -> Any:
+        return self._request(
+            "POST", path, body=body, authenticated=authenticated, token=token, extra_headers=headers,
+        )
 
     def put(self, path: str, body: dict[str, Any] | None = None, authenticated: bool = True,
             *, token: str | None = None) -> Any:

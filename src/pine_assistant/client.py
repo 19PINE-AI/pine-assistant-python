@@ -16,6 +16,7 @@ from pine_assistant.auth import Auth, SyncAuth
 from pine_assistant.chat import ChatEngine, ChatEvent, Deduplicator, event_from_envelope
 from pine_assistant.errors import ConnectionError
 from pine_assistant.models.events import C2SEvent
+from pine_assistant.models.form import FormSubmissionResult, FormToUserData, encode_form_answers
 from pine_assistant.sessions import SessionsAPI, SyncSessionsAPI
 from pine_assistant.transport.http import DEFAULT_API_BASE_PATH, DEFAULT_BASE_URL, HttpClient, SyncHttpClient
 from pine_assistant.transport.socketio import SocketIOManager
@@ -25,6 +26,10 @@ DEVICE_ID_ENV = "PINE_DEVICE_ID"
 
 HISTORY_PAGE_SIZE = 30
 HISTORY_MAX_BYTES = 5_242_880
+HISTORY_MAX_MESSAGES = 100
+HISTORY_MAX_PAGES = 100
+FORM_RESPONSE_TIMEOUT_S = 10.0
+FORM_RESPONSE_MAX_TIMEOUT_S = 30.0
 
 _logger = logging.getLogger(__name__)
 
@@ -179,19 +184,23 @@ class AsyncPineAI:
         deliberately.
         """
         self._ensure_connected()
+        if isinstance(max_messages, bool) or not isinstance(max_messages, int) or not 1 <= max_messages <= HISTORY_MAX_MESSAGES:
+            raise ValueError(f"max_messages must be between 1 and {HISTORY_MAX_MESSAGES}")
+        if order.upper() not in ("ASC", "DESC"):
+            raise ValueError("order must be ASC or DESC")
         return await self._sio.emit_and_wait(  # type: ignore[union-attr]
             C2SEvent.SESSION_HISTORY,
             {
                 "max_messages": max_messages,
                 "max_bytes": HISTORY_MAX_BYTES,
-                "order": order,
+                "order": order.upper(),
                 "from_message_id": from_message_id,
             },
             session_id=session_id,
         )
 
     async def rebuild(
-        self, session_id: str, *, page_size: int = HISTORY_PAGE_SIZE, max_pages: int = 100,
+        self, session_id: str, *, page_size: int = HISTORY_PAGE_SIZE, max_pages: int = HISTORY_MAX_PAGES,
     ) -> list[dict[str, Any]]:
         """Rebuild a session's messages from history, unconditionally.
 
@@ -202,6 +211,8 @@ class AsyncPineAI:
         Messages of every type are returned, including ones outside the
         supported scope; filtering is the caller's to do.
         """
+        if isinstance(max_pages, bool) or not isinstance(max_pages, int) or not 1 <= max_pages <= HISTORY_MAX_PAGES:
+            raise ValueError(f"max_pages must be between 1 and {HISTORY_MAX_PAGES}")
         messages: list[dict[str, Any]] = []
         cursor: str | None = None
         for _ in range(max_pages):
@@ -215,6 +226,76 @@ class AsyncPineAI:
             "the returned history is incomplete.", session_id, max_pages,
         )
         return messages
+
+    async def _find_form_request(
+        self, session_id: str, message_id: str, *, deadline: float,
+    ) -> dict[str, Any]:
+        """Locate one agent-authored form request in bounded persisted history."""
+        cursor: str | None = None
+        for _ in range(HISTORY_MAX_PAGES):
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                raise TimeoutError("timed out locating the persisted form request")
+            page = await asyncio.wait_for(
+                self.get_history(session_id, max_messages=HISTORY_PAGE_SIZE, order="DESC", from_message_id=cursor),
+                timeout=remaining,
+            )
+            for message in page.get("messages") or []:
+                if not isinstance(message, dict):
+                    continue
+                payload = message.get("payload")
+                metadata = message.get("metadata")
+                source = metadata.get("source") if isinstance(metadata, dict) else None
+                if (
+                    message.get("type") == C2SEvent.SESSION_FORM_TO_USER
+                    and isinstance(payload, dict)
+                    and str(payload.get("message_id")) == message_id
+                    and isinstance(metadata, dict)
+                    and isinstance(source, dict)
+                    and source.get("role") == "agent"
+                    and isinstance(metadata.get("request_id"), str)
+                    and metadata["request_id"]
+                ):
+                    return message
+            cursor = page.get("next_message_id") or None
+            if not cursor:
+                break
+        raise ValueError("form request is not available in bounded session history")
+
+    async def submit_form_response(
+        self,
+        session_id: str,
+        message_id: str,
+        answers: dict[str, Any],
+        *,
+        timeout: float = FORM_RESPONSE_TIMEOUT_S,
+    ) -> FormSubmissionResult:
+        """Submit answers to a persisted agent form request.
+
+        The original request is re-read from authenticated history. Its message
+        ID and request ID are the only association used on the wire; callers
+        cannot supply PII metadata or form definitions. The result reports only
+        observed persistence and delivery, never a Socket.IO ACK.
+        """
+        self._ensure_connected()
+        if not 0 < timeout <= FORM_RESPONSE_MAX_TIMEOUT_S:
+            raise ValueError(f"timeout must be between 0 and {FORM_RESPONSE_MAX_TIMEOUT_S} seconds")
+        deadline = asyncio.get_running_loop().time() + timeout
+        original = await self._find_form_request(session_id, message_id, deadline=deadline)
+        payload = original["payload"]
+        metadata = original["metadata"]
+        try:
+            form = FormToUserData.model_validate(payload.get("data"))
+            content = encode_form_answers(form.form, answers)
+        except (TypeError, ValueError):
+            # Do not attach answer values to failures: form values can be PII.
+            raise ValueError("form response does not match the persisted form") from None
+        remaining = deadline - asyncio.get_running_loop().time()
+        if remaining <= 0:
+            raise TimeoutError("timed out before form response could be submitted")
+        return await self._chat.submit_form_response(  # type: ignore[union-attr]
+            session_id, message_id, metadata["request_id"], content, timeout=remaining,
+        )
 
     async def chat(
         self,
@@ -312,12 +393,11 @@ class AsyncPineAI:
             self.leave_session(sid)
 
     def send_form_response(self, session_id: str, message_id: str, form_data: dict[str, Any]) -> None:
-        """Answer a `session:form_to_user` request.
+        """Deprecated fire-and-forget form response.
 
-        Submit only values the user supplied. The format has no representation
-        for refusal and an empty submission is indistinguishable from empty
-        answers, so a fabricated answer may be acted on. Sending nothing is
-        safe.
+        Use :meth:`submit_form_response`, which verifies the original form and
+        reports persisted delivery. This legacy method intentionally remains
+        synchronous for compatibility and cannot provide either guarantee.
         """
         self._ensure_connected()
         self._chat.send_form_response(session_id, message_id, form_data)  # type: ignore[union-attr]
