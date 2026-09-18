@@ -52,9 +52,10 @@ class FormToUserData(BaseModel):
 class FormSubmissionResult:
     """What the server was observed to do with a form reply.
 
-    ``delivered`` requires both the persisted user reply and a matching delivery
-    receipt. ``received`` means the reply was persisted but delivery was not
-    observed before the deadline. ``unknown`` is intentionally conservative.
+    ``delivered`` and ``received`` come from a matching backend message-status
+    receipt, which carries the persisted reply's message ID. ``received`` means
+    the reply was persisted but delivery was not observed. ``unknown`` is
+    intentionally conservative.
     """
 
     status: Literal["delivered", "received", "unknown"]

@@ -89,12 +89,14 @@ finally:
 The method re-reads the original agent form from authenticated history, preserves
 its message and request IDs, validates visible required fields, and JSON-encodes
 array answers like the web app. Callers cannot override field privacy levels.
-`delivered` requires the persisted reply and its delivery receipt; `received` or
-`unknown` requires checking history before deciding whether to submit again.
-A transport ACK is not a delivery receipt. The legacy synchronous
-`send_form_response()` is deprecated: it cannot recover the original request ID
-and is rejected by backends enforcing strict form correlation. Migrate callers to
-`await submit_form_response()` before rolling out that backend validation.
+The backend's `session:message_status` receipt supplies the persisted reply ID:
+`delivered` means it reached the agent and `received` means it was persisted but
+delivery was not observed before the deadline. `unknown` requires checking
+history before deciding whether to submit again. Each Socket.IO connection sends
+a form only once because a late receipt cannot identify an attempt; reconnects
+never retry or replay form submissions. A transport ACK is not a delivery
+receipt. The legacy synchronous `send_form_response()` is deprecated because it
+cannot verify the original form request.
 
 ## Quick Start (Sync REST)
 

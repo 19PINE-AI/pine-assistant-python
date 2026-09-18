@@ -165,7 +165,7 @@ def test_form_visibility_uses_javascript_strict_primitive_equality():
         encode_form_answers(form, {"parent": True, "child": "value"})
 
 
-async def test_form_reply_requires_persisted_echo_and_delivery_receipt(client):
+async def test_form_reply_uses_status_receipt_without_sender_echo(client):
     pine, fake = client
     original = _form_request()
     fake.reply_to("session:history", {"messages": [original], "next_message_id": ""})
@@ -176,11 +176,9 @@ async def test_form_reply_requires_persisted_echo_and_delivery_receipt(client):
         assert request["payload"]["message_id"] == "form-1"
         assert request["payload"]["data"] == {"content": {"plan": "yes", "extras": '["a","b"]'}}
         return [
-            envelope("session:form_to_user", {"content": {"plan": "yes"}}, message_id="reply-1",
-                     request_id=request_id, event_id=request["metadata"]["event_id"], role="user"),
             envelope("session:message_status", {
                 "message_id": "reply-1", "request_id": request_id, "status": "delivered",
-            }, request_id=request_id, event_id="delivered", role="system"),
+            }, request_id="unrelated-status-request", event_id="delivered", role="system"),
         ]
 
     fake.responders["session:form_to_user"] = responder
@@ -191,13 +189,24 @@ async def test_form_reply_requires_persisted_echo_and_delivery_receipt(client):
     assert not pine._sio._event_handlers  # type: ignore[union-attr]
 
 
-async def test_form_ack_without_persisted_reply_is_unknown_and_never_retried(client):
+async def test_form_timeout_is_unknown_and_does_not_allow_an_ambiguous_resubmit(client):
     pine, fake = client
     fake.reply_to("session:history", {"messages": [_form_request()], "next_message_id": ""})
     result = await pine.submit_form_response(SESSION_ID, "form-1", {"plan": "yes"}, timeout=0.02)
     assert result.status == "unknown"
     assert len(fake.emits_of("session:form_to_user")) == 1
     assert not pine._sio._event_handlers  # type: ignore[union-attr]
+
+    # This receipt might belong to the timed-out send. It cannot cause a
+    # second send or be attributed to one on the same connection.
+    await fake.deliver(envelope(
+        "session:message_status",
+        {"message_id": "late-reply", "request_id": "form-request", "status": "delivered"},
+        event_id="late-receipt", role="system",
+    ))
+    with pytest.raises(RuntimeError, match="already been submitted"):
+        await pine.submit_form_response(SESSION_ID, "form-1", {"plan": "yes"})
+    assert len(fake.emits_of("session:form_to_user")) == 1
 
 
 async def test_form_received_receipt_retains_its_actual_reason(client):
@@ -207,47 +216,235 @@ async def test_form_received_receipt_retains_its_actual_reason(client):
     def responder(request):
         request_id = request["metadata"]["request_id"]
         return [
-            envelope("session:form_to_user", {"content": {}}, message_id="reply-2",
-                     request_id=request_id, event_id=request["metadata"]["event_id"], role="user"),
             envelope("session:message_status", {
                 "message_id": "reply-2", "request_id": request_id, "status": "received",
                 "reason": "Send message to agent failed.",
-            }, request_id=request_id, event_id="received-2", role="system"),
+            }, event_id="received-2", role="system"),
         ]
 
     fake.responders["session:form_to_user"] = responder
     result = await pine.submit_form_response(SESSION_ID, "form-1", {"plan": "yes"}, timeout=0.02)
     assert result.status == "received"
     assert result.reason == "Send message to agent failed."
+    assert result.message_id == "reply-2"
 
 
-async def test_concurrent_form_replies_with_one_request_id_keep_their_own_echoes(client):
+async def test_form_received_receipt_waits_for_a_matching_delivered_receipt(client):
+    pine, fake = client
+    fake.reply_to("session:history", {"messages": [_form_request()], "next_message_id": ""})
+    task = asyncio.create_task(pine.submit_form_response(SESSION_ID, "form-1", {"plan": "yes"}, timeout=0.2))
+    for _ in range(10):
+        await asyncio.sleep(0)
+        if fake.emits_of("session:form_to_user"):
+            break
+
+    await fake.deliver(envelope(
+        "session:message_status",
+        {"message_id": "reply-1", "request_id": "form-request", "status": "received"},
+        event_id="received-1", role="system",
+    ))
+    await asyncio.sleep(0)
+    assert not task.done()
+    await fake.deliver(envelope(
+        "session:message_status",
+        {"message_id": "other-reply", "request_id": "form-request", "status": "delivered"},
+        event_id="wrong-delivered", role="system",
+    ))
+    await asyncio.sleep(0)
+    assert not task.done()
+    await fake.deliver(envelope(
+        "session:message_status",
+        {"message_id": "reply-1", "request_id": "form-request", "status": "delivered"},
+        event_id="delivered-1", role="system",
+    ))
+    result = await task
+    assert result.status == "delivered"
+    assert result.message_id == "reply-1"
+
+
+async def test_form_received_receipt_survives_a_later_terminal_error(client):
+    pine, fake = client
+    fake.reply_to("session:history", {"messages": [_form_request()], "next_message_id": ""})
+    task = asyncio.create_task(pine.submit_form_response(SESSION_ID, "form-1", {"plan": "yes"}, timeout=0.2))
+    for _ in range(10):
+        await asyncio.sleep(0)
+        if fake.emits_of("session:form_to_user"):
+            break
+
+    await fake.deliver(envelope(
+        "session:message_status",
+        {
+            "message_id": "reply-1",
+            "request_id": "form-request",
+            "status": "received",
+            "reason": "delivery pending",
+        },
+        event_id="received-1", role="system",
+    ))
+    await fake.deliver(envelope(
+        "session:message_status",
+        {
+            "message_id": "reply-1",
+            "request_id": "form-request",
+            "status": "delivery_failed",
+            "reason": "secret-value",
+        },
+        event_id="failed-1", role="system",
+    ))
+    result = await task
+    assert result.status == "received"
+    assert result.message_id == "reply-1"
+    assert result.reason == "delivery pending"
+
+
+async def test_form_receipt_ignores_another_session_or_form_request(client):
+    pine, fake = client
+    fake.reply_to("session:history", {"messages": [_form_request()], "next_message_id": ""})
+    task = asyncio.create_task(pine.submit_form_response(SESSION_ID, "form-1", {"plan": "yes"}))
+    for _ in range(10):
+        await asyncio.sleep(0)
+        if fake.emits_of("session:form_to_user"):
+            break
+    await fake.deliver(envelope(
+        "session:message_status",
+        {"message_id": "wrong-session", "request_id": "form-request", "status": "delivered"},
+        session_id=OTHER_SESSION, event_id="wrong-session", role="system",
+    ))
+    await fake.deliver(envelope(
+        "session:message_status",
+        {"message_id": "wrong-request", "request_id": "another-form", "status": "delivered"},
+        event_id="wrong-request", role="system",
+    ))
+    assert not task.done()
+    await fake.deliver(envelope(
+        "session:message_status",
+        {"message_id": "right-reply", "request_id": "form-request", "status": "delivered"},
+        event_id="right-receipt", role="system",
+    ))
+    assert (await task).message_id == "right-reply"
+
+
+async def test_failed_form_receipt_is_unknown_without_its_reason(client):
+    pine, fake = client
+    fake.reply_to("session:history", {"messages": [_form_request()], "next_message_id": ""})
+
+    def responder(request):
+        return [envelope(
+            "session:message_status",
+            {
+                "message_id": "reply-failed",
+                "request_id": request["metadata"]["request_id"],
+                "status": "delivery_failed",
+                "reason": "could not deliver secret-value",
+            },
+            event_id="failed-receipt", role="system",
+        )]
+
+    fake.responders["session:form_to_user"] = responder
+    result = await pine.submit_form_response(SESSION_ID, "form-1", {"plan": "yes"})
+    assert result.status == "unknown"
+    assert result.reason is None
+
+
+async def test_same_form_submission_is_rejected_while_another_is_pending(client):
     pine, fake = client
     fake.reply_to("session:history", {"messages": [_form_request()], "next_message_id": ""})
     first = asyncio.create_task(pine.submit_form_response(SESSION_ID, "form-1", {"plan": "yes"}))
     second = asyncio.create_task(pine.submit_form_response(SESSION_ID, "form-1", {"plan": "yes"}))
-    requests = []
+    with pytest.raises(RuntimeError, match="already been submitted"):
+        await second
+    assert len(fake.emits_of("session:form_to_user")) == 1
+    await fake.deliver(envelope(
+        "session:message_status",
+        {"message_id": "reply-1", "request_id": "form-request", "status": "delivered"},
+        event_id="first-receipt", role="system",
+    ))
+    assert (await first).message_id == "reply-1"
+
+
+async def test_reconnect_does_not_replay_a_form_and_allows_a_new_attempt(client):
+    pine, fake = client
+    fake.reply_to("session:history", {"messages": [_form_request()], "next_message_id": ""})
+    first = asyncio.create_task(pine.submit_form_response(SESSION_ID, "form-1", {"plan": "yes"}))
     for _ in range(10):
         await asyncio.sleep(0)
-        requests = fake.emits_of("session:form_to_user")
-        if len(requests) == 2:
+        if fake.emits_of("session:form_to_user"):
             break
-    assert len(requests) == 2
-    for index in (1, 0):
-        request = requests[index]
-        event_id = request["metadata"]["event_id"]
-        request_id = request["metadata"]["request_id"]
-        reply_id = f"concurrent-reply-{index}"
-        await fake.deliver(envelope(
-            "session:form_to_user", {"content": {}}, message_id=reply_id,
-            request_id=request_id, event_id=event_id, role="user",
-        ))
-        await fake.deliver(envelope(
-            "session:message_status", {"message_id": reply_id, "request_id": request_id, "status": "delivered"},
-            request_id=request_id, event_id=f"receipt-{index}", role="system",
-        ))
-    assert (await first).message_id == "concurrent-reply-0"
-    assert (await second).message_id == "concurrent-reply-1"
+    await fake.deliver(envelope(
+        "session:message_status",
+        {"message_id": "reply-1", "request_id": "form-request", "status": "delivered"},
+        event_id="first-receipt", role="system",
+    ))
+    await first
+
+    await fake.fire_ready()
+    assert len(fake.emits_of("session:form_to_user")) == 1
+
+    second = asyncio.create_task(pine.submit_form_response(SESSION_ID, "form-1", {"plan": "yes"}))
+    for _ in range(10):
+        await asyncio.sleep(0)
+        if len(fake.emits_of("session:form_to_user")) == 2:
+            break
+    await fake.deliver(envelope(
+        "session:message_status",
+        {"message_id": "reply-2", "request_id": "form-request", "status": "delivered"},
+        event_id="second-receipt", role="system",
+    ))
+    assert (await second).message_id == "reply-2"
+
+
+async def test_different_form_requests_submit_concurrently(client):
+    pine, fake = client
+    fake.reply_to("session:history", {
+        "messages": [_form_request("form-1", "request-1"), _form_request("form-2", "request-2")],
+        "next_message_id": "",
+    })
+    first = asyncio.create_task(pine.submit_form_response(SESSION_ID, "form-1", {"plan": "yes"}))
+    second = asyncio.create_task(pine.submit_form_response(SESSION_ID, "form-2", {"plan": "yes"}))
+    for _ in range(10):
+        await asyncio.sleep(0)
+        if len(fake.emits_of("session:form_to_user")) == 2:
+            break
+    assert len(fake.emits_of("session:form_to_user")) == 2
+    await fake.deliver(envelope(
+        "session:message_status",
+        {"message_id": "reply-2", "request_id": "request-2", "status": "delivered"},
+        event_id="receipt-2", role="system",
+    ))
+    await fake.deliver(envelope(
+        "session:message_status",
+        {"message_id": "reply-1", "request_id": "request-1", "status": "delivered"},
+        event_id="receipt-1", role="system",
+    ))
+    assert (await first).message_id == "reply-1"
+    assert (await second).message_id == "reply-2"
+
+
+async def test_pending_form_submission_cleans_up_on_cancel_and_disconnect(client):
+    pine, fake = client
+    fake.reply_to("session:history", {
+        "messages": [_form_request("form-1", "request-1"), _form_request("form-2", "request-2")],
+        "next_message_id": "",
+    })
+    task = asyncio.create_task(pine.submit_form_response(SESSION_ID, "form-1", {"plan": "yes"}))
+    for _ in range(10):
+        await asyncio.sleep(0)
+        if fake.emits_of("session:form_to_user"):
+            break
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert not pine._sio._event_handlers  # type: ignore[union-attr]
+
+    disconnected = asyncio.create_task(pine.submit_form_response(SESSION_ID, "form-2", {"plan": "yes"}))
+    for _ in range(10):
+        await asyncio.sleep(0)
+        if len(fake.emits_of("session:form_to_user")) == 2:
+            break
+    await fake._handlers["disconnect"]()
+    assert (await disconnected).status == "unknown"
+    assert not pine._sio._event_handlers  # type: ignore[union-attr]
+    assert not pine._sio._form_submission_pending_keys  # type: ignore[union-attr]
 
 
 async def test_form_rejects_unrequested_or_hidden_answers_without_emitting(client):
