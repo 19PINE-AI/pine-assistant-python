@@ -14,7 +14,12 @@ _USER_AGENT = "pine-assistant-sdk"
 
 # Public HTTPX timeout inputs accepted by both sync and async clients.  HTTPX's
 # internal ``TimeoutTypes`` alias is not exported in every supported release.
-TimeoutConfig = httpx.Timeout | float | None | tuple[float | None, float | None, float | None, float | None]
+TimeoutConfig = (
+    httpx.Timeout
+    | float
+    | None
+    | tuple[float | None, float | None, float | None, float | None]
+)
 
 
 def _api_url(base_url: str, api_base_path: str) -> str:
@@ -117,12 +122,7 @@ class HttpClient:
             headers.pop("Content-Type", None)
         try:
             request = self._client.build_request(
-                method,
-                self._url(path),
-                json=body,
-                params=params,
-                headers=headers,
-                files=files,
+                method, self._url(path), json=body, params=params, headers=headers, files=files,
             )
             # An injected client may carry default authentication. Never let it
             # authenticate an anonymous request or a request for another user.
@@ -137,45 +137,28 @@ class HttpClient:
             raise PineAIError("connection_error", "Pine API request could not be completed") from exc
         return _json_data(response)
 
-    async def get(
-        self,
-        path: str,
-        authenticated: bool = True,
-        *,
-        token: str | None = None,
-        params: dict[str, str | int] | None = None,
-    ) -> Any:
+    async def get(self, path: str, authenticated: bool = True, *, token: str | None = None,
+                  params: dict[str, str | int] | None = None) -> Any:
         return await self._request("GET", path, authenticated=authenticated, token=token, params=params)
 
-    async def post(
-        self, path: str, body: dict[str, Any] | None = None, authenticated: bool = True, *, token: str | None = None
-    ) -> Any:
+    async def post(self, path: str, body: dict[str, Any] | None = None, authenticated: bool = True,
+                   *, token: str | None = None) -> Any:
         return await self._request("POST", path, body=body, authenticated=authenticated, token=token)
 
-    async def put(
-        self, path: str, body: dict[str, Any] | None = None, authenticated: bool = True, *, token: str | None = None
-    ) -> Any:
+    async def put(self, path: str, body: dict[str, Any] | None = None, authenticated: bool = True,
+                  *, token: str | None = None) -> Any:
         return await self._request("PUT", path, body=body, authenticated=authenticated, token=token)
 
-    async def delete(
-        self,
-        path: str,
-        params: dict[str, str | int] | None = None,
-        authenticated: bool = True,
-        *,
-        token: str | None = None,
-    ) -> Any:
+    async def delete(self, path: str, params: dict[str, str | int] | None = None, authenticated: bool = True,
+                     *, token: str | None = None) -> Any:
         return await self._request("DELETE", path, params=params, authenticated=authenticated, token=token)
 
     async def upload(self, path: str, file_path: str, authenticated: bool = True) -> Any:
         """Upload a file via multipart form data."""
         import os
-
         with open(file_path, "rb") as file_handle:
             return await self._request(
-                "POST",
-                path,
-                authenticated=authenticated,
+                "POST", path, authenticated=authenticated,
                 files={"files": (os.path.basename(file_path), file_handle)},
             )
 
@@ -239,12 +222,7 @@ class SyncHttpClient:
             headers.pop("Content-Type", None)
         try:
             request = self._client.build_request(
-                method,
-                self._url(path),
-                json=body,
-                params=params,
-                headers=headers,
-                files=files,
+                method, self._url(path), json=body, params=params, headers=headers, files=files,
             )
             if authenticated and actual_token:
                 request.headers["Authorization"] = f"Bearer {actual_token}"
@@ -257,44 +235,27 @@ class SyncHttpClient:
             raise PineAIError("connection_error", "Pine API request could not be completed") from exc
         return _json_data(response)
 
-    def get(
-        self,
-        path: str,
-        authenticated: bool = True,
-        *,
-        token: str | None = None,
-        params: dict[str, str | int] | None = None,
-    ) -> Any:
+    def get(self, path: str, authenticated: bool = True, *, token: str | None = None,
+            params: dict[str, str | int] | None = None) -> Any:
         return self._request("GET", path, authenticated=authenticated, token=token, params=params)
 
-    def post(
-        self, path: str, body: dict[str, Any] | None = None, authenticated: bool = True, *, token: str | None = None
-    ) -> Any:
+    def post(self, path: str, body: dict[str, Any] | None = None, authenticated: bool = True,
+             *, token: str | None = None) -> Any:
         return self._request("POST", path, body=body, authenticated=authenticated, token=token)
 
-    def put(
-        self, path: str, body: dict[str, Any] | None = None, authenticated: bool = True, *, token: str | None = None
-    ) -> Any:
+    def put(self, path: str, body: dict[str, Any] | None = None, authenticated: bool = True,
+            *, token: str | None = None) -> Any:
         return self._request("PUT", path, body=body, authenticated=authenticated, token=token)
 
-    def delete(
-        self,
-        path: str,
-        params: dict[str, str | int] | None = None,
-        authenticated: bool = True,
-        *,
-        token: str | None = None,
-    ) -> Any:
+    def delete(self, path: str, params: dict[str, str | int] | None = None, authenticated: bool = True,
+               *, token: str | None = None) -> Any:
         return self._request("DELETE", path, params=params, authenticated=authenticated, token=token)
 
     def upload(self, path: str, file_path: str, authenticated: bool = True) -> Any:
         import os
-
         with open(file_path, "rb") as file_handle:
             return self._request(
-                "POST",
-                path,
-                authenticated=authenticated,
+                "POST", path, authenticated=authenticated,
                 files={"files": (os.path.basename(file_path), file_handle)},
             )
 
