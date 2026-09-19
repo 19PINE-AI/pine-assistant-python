@@ -6,20 +6,35 @@ from typing import Any
 
 
 class PineAIError(Exception):
-    def __init__(self, code: str, message: str, details: dict[str, Any] | None = None):
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        details: dict[str, Any] | None = None,
+        *,
+        status_code: int | None = None,
+    ):
         super().__init__(message)
         self.code = code
         self.details = details
+        self.status_code = status_code
 
 
 class AuthError(PineAIError):
-    def __init__(self, message: str, code: str = "auth_error"):
-        super().__init__(code, message)
+    def __init__(self, message: str, code: str = "auth_error", *, status_code: int | None = None):
+        super().__init__(code, message, status_code=status_code)
 
 
 class SessionError(PineAIError):
-    def __init__(self, message: str, code: str = "session_error", details: dict[str, Any] | None = None):
-        super().__init__(code, message, details)
+    def __init__(
+        self,
+        message: str,
+        code: str = "session_error",
+        details: dict[str, Any] | None = None,
+        *,
+        status_code: int | None = None,
+    ):
+        super().__init__(code, message, details, status_code=status_code)
 
 
 class ConnectionError(PineAIError):

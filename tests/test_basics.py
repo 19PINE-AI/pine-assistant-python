@@ -1,5 +1,9 @@
 """Basic unit tests for pine-assistant package."""
 
+from typing import get_type_hints
+
+import httpx
+
 from pine_assistant import (
     SUPPORTED_EVENTS,
     AsyncPineAI,
@@ -17,6 +21,23 @@ from pine_assistant import (
 def test_public_exports():
     assert PineAI is not None
     assert AsyncPineAI is not None
+
+
+def test_http_client_timeout_annotations_resolve_with_public_httpx_types():
+    from pine_assistant.transport.http import HttpClient, SyncHttpClient
+
+    assert "timeout" in get_type_hints(HttpClient.__init__)
+    assert "timeout" in get_type_hints(SyncHttpClient.__init__)
+
+
+async def test_http_clients_accept_httpx_timeout_components_with_none():
+    from pine_assistant.transport.http import HttpClient, SyncHttpClient
+
+    timeout = (1.0, None, None, None)
+    async_client = HttpClient(timeout=timeout, transport=httpx.MockTransport(lambda _request: httpx.Response(200)))
+    sync_client = SyncHttpClient(timeout=timeout, transport=httpx.MockTransport(lambda _request: httpx.Response(200)))
+    await async_client.close()
+    sync_client.close()
 
 
 def test_error_hierarchy():

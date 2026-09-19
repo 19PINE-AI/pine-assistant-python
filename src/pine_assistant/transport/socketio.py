@@ -14,6 +14,7 @@ from typing import Any
 import socketio
 
 from pine_assistant.errors import ConnectionError as PineConnectionError
+from pine_assistant.models.form import FormSubmissionResult
 
 SOCKETIO_PATH = "/api/v2/socket.io/"
 
@@ -52,6 +53,10 @@ class SocketIOManager:
         self._event_handlers: list[Callable[[str, dict[str, Any]], None]] = []
         self._reconnect_handlers: list[Callable[[], None]] = []
         self._joined_sessions: set[str] = set()
+        self._disconnect_event = asyncio.Event()
+        self._connection_generation = 0
+        self._form_submission_attempts: dict[tuple[str, str], int] = {}
+        self._form_submission_pending_keys: set[tuple[str, str]] = set()
 
     @property
     def connected(self) -> bool:
@@ -88,6 +93,8 @@ class SocketIOManager:
         if self._sio and self._sio.connected:
             return
 
+        disconnect_event = asyncio.Event()
+        self._disconnect_event = disconnect_event
         self._sio = socketio.AsyncClient()
         ready_event = asyncio.Event()
         connect_error_data: dict[str, Any] = {}
@@ -106,6 +113,13 @@ class SocketIOManager:
             if not ready_event.is_set():
                 ready_event.set()
             else:
+                self._connection_generation += 1
+                self._disconnect_event = asyncio.Event()
+                self._form_submission_attempts = {
+                    key: generation
+                    for key, generation in self._form_submission_attempts.items()
+                    if key in self._form_submission_pending_keys
+                }
                 # Reconnection: re-join every previously joined session. State
                 # is rebuilt from history rather than resumed from a cursor, so
                 # the join carries since_revision "0" here too.
@@ -125,6 +139,7 @@ class SocketIOManager:
         @self._sio.event
         async def disconnect(_reason: str = "") -> None:
             self._connected = False
+            self._disconnect_event.set()
 
         try:
             await self._sio.connect(
@@ -134,7 +149,12 @@ class SocketIOManager:
                 socketio_path=SOCKETIO_PATH,
                 wait_timeout=self._ready_timeout,
             )
-        except Exception as exc:
+        except Exception:
+            with contextlib.suppress(Exception):
+                await self._sio.disconnect()
+            self._sio = None
+            self._connected = False
+            self._disconnect_event.set()
             # python-socketio raises the generic "One or more namespaces
             # failed to connect" when the server replies with connect_error.
             # Surface the actual server-supplied reason if we captured one.
@@ -142,13 +162,17 @@ class SocketIOManager:
                 reason = _format_connect_error(connect_error_data["payload"])
                 raise PineConnectionError(
                     f"Socket.IO connect rejected by server: {reason}"
-                ) from exc
-            raise PineConnectionError(f"Socket.IO connect failed: {exc}") from exc
+                ) from None
+            raise PineConnectionError("Socket.IO connect failed") from None
 
         try:
             await asyncio.wait_for(ready_event.wait(), timeout=self._ready_timeout)
         except asyncio.TimeoutError:
-            await self._sio.disconnect()
+            with contextlib.suppress(Exception):
+                await self._sio.disconnect()
+            self._sio = None
+            self._connected = False
+            self._disconnect_event.set()
             # The Pine backend accepts the WebSocket but only emits 'ready' after
             # its own auth check. A timeout here almost always means the token or
             # user_id is rejected — surface that hint instead of a generic timeout.
@@ -156,6 +180,15 @@ class SocketIOManager:
                 f"Socket.IO connected but no 'ready' event after {self._ready_timeout}s. "
                 "This usually means access_token or user_id is invalid/expired — re-run the auth flow."
             ) from None
+        self._connection_generation += 1
+        # An earlier connection may still be unwinding after its disconnect.
+        # Preserve those pending keys until their waiter has cleaned up, but a
+        # completed attempt is scoped only to the connection that sent it.
+        self._form_submission_attempts = {
+            key: generation
+            for key, generation in self._form_submission_attempts.items()
+            if key in self._form_submission_pending_keys
+        }
 
     def _track_membership(self, event_type: str, session_id: str | None) -> None:
         """Remember which sessions to re-join after a reconnect.
@@ -204,9 +237,9 @@ class SocketIOManager:
                 return
             try:
                 await self._sio.emit(event_type, envelope)  # type: ignore[union-attr]
-            except Exception as e:
+            except Exception:
                 import logging
-                logging.getLogger("pine_assistant.transport.socketio").error(f"Emit failed for {event_type}: {e}")
+                logging.getLogger("pine_assistant.transport.socketio").error("Emit failed for %s", event_type)
 
         try:
             loop = asyncio.get_running_loop()
@@ -221,7 +254,11 @@ class SocketIOManager:
         session_id: str | None = None,
         timeout: float = 10.0,
     ) -> dict[str, Any]:
-        """Emit and wait for a response event with matching session_id."""
+        """Emit and wait for the response with the exact request correlation.
+
+        A session match alone is insufficient: concurrent requests in one room
+        receive the same event name. The backend echoes the client request ID.
+        """
         if not self._sio or not self._sio.connected:
             raise RuntimeError("Socket.IO not connected")
         self._track_membership(event_type, session_id)
@@ -237,35 +274,174 @@ class SocketIOManager:
 
         result_event = asyncio.Event()
         result_data: dict[str, Any] = {}
+        error_event = asyncio.Event()
 
         def response_handler(evt: str, raw: dict[str, Any]) -> None:
+            payload = raw.get("payload")
+            meta = raw.get("metadata")
+            if not isinstance(payload, dict) or not isinstance(meta, dict):
+                return
+            if payload.get("session_id") != session_id or meta.get("request_id") != request_id:
+                return
             if evt == event_type:
-                payload = raw.get("payload", {})
-                meta = raw.get("metadata", {})
-                match_by_request = meta.get("request_id") == request_id
-                match_by_session = (
-                    session_id and
-                    payload.get("session_id") == session_id and
-                    meta.get("source", {}).get("role") != "user"
-                )
-                if match_by_request or match_by_session:
-                    result_data.update(payload.get("data") or {})
+                data = payload.get("data")
+                if isinstance(data, dict):
+                    result_data.update(data)
                     result_event.set()
+            elif evt == "session:error":
+                error_event.set()
 
         remove_handler = self.add_event_handler(response_handler)
-        await self._sio.emit(event_type, envelope)
-
+        waiters: list[asyncio.Task[bool]] = []
         try:
-            await asyncio.wait_for(result_event.wait(), timeout=timeout)
+            await self._sio.emit(event_type, envelope)
+            result_wait = asyncio.create_task(result_event.wait())
+            error_wait = asyncio.create_task(error_event.wait())
+            disconnect_wait = asyncio.create_task(self._disconnect_event.wait())
+            waiters = [result_wait, error_wait, disconnect_wait]
+            done, _ = await asyncio.wait(
+                waiters, timeout=timeout,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if not done:
+                raise TimeoutError(f"Timeout waiting for {event_type} response")
+            if error_wait in done:
+                raise RuntimeError(f"Server rejected {event_type}")
+            if disconnect_wait in done:
+                raise RuntimeError("Socket.IO disconnected while waiting for a response")
         except asyncio.TimeoutError:
             raise TimeoutError(f"Timeout waiting for {event_type} response") from None
         finally:
+            for waiter in waiters:
+                if not waiter.done():
+                    waiter.cancel()
+            if waiters:
+                await asyncio.gather(*waiters, return_exceptions=True)
             remove_handler()
 
         return result_data
 
+    async def emit_form_response(
+        self,
+        *,
+        session_id: str,
+        original_message_id: str,
+        original_request_id: str,
+        content: dict[str, Any],
+        timeout: float,
+    ) -> FormSubmissionResult:
+        """Submit a verified form response and observe its durable outcome.
+
+        Socket.IO ACKs only confirm transport handling. The backend instead
+        directly emits a matching ``session:message_status`` whose request ID
+        is the original form request and whose message ID is the persisted
+        reply. It never retries: after a deadline callers get only what was
+        observed.
+        """
+        if not self._sio or not self._sio.connected:
+            raise RuntimeError("Socket.IO not connected")
+        submission_key = (session_id, original_request_id)
+        attempted_generation = self._form_submission_attempts.get(submission_key)
+        if (
+            submission_key in self._form_submission_pending_keys
+            or attempted_generation == self._connection_generation
+        ):
+            raise RuntimeError("a response for this form has already been submitted on this connection")
+        self._form_submission_attempts[submission_key] = self._connection_generation
+        self._form_submission_pending_keys.add(submission_key)
+
+        from pine_assistant.transport.envelope import build_envelope
+
+        envelope = build_envelope(
+            "session:form_to_user", {"content": content},
+            user_id=self._user_id, device_id=self._device_id,
+            session_id=session_id, message_id=original_message_id,
+            request_id=original_request_id,
+        )
+        progress = asyncio.Event()
+        persisted_message_id: str | None = None
+        received_reason: str | None = None
+        delivered = False
+        terminal_failure = False
+        disconnect_event = self._disconnect_event
+
+        def response_handler(evt: str, raw: dict[str, Any]) -> None:
+            nonlocal delivered, persisted_message_id, received_reason, terminal_failure
+            payload = raw.get("payload")
+            metadata = raw.get("metadata")
+            if not isinstance(payload, dict) or payload.get("session_id") != session_id:
+                return
+            if evt == "session:message_status":
+                data = payload.get("data")
+                if not isinstance(data, dict) or data.get("request_id") != original_request_id:
+                    return
+                status = data.get("status")
+                message_id = data.get("message_id")
+                if status == "received" and isinstance(message_id, str) and message_id:
+                    if persisted_message_id is not None and message_id != persisted_message_id:
+                        return
+                    persisted_message_id = message_id
+                    reason = data.get("reason")
+                    received_reason = reason if isinstance(reason, str) else None
+                elif status == "delivered" and isinstance(message_id, str) and message_id:
+                    if persisted_message_id is not None and message_id != persisted_message_id:
+                        return
+                    persisted_message_id = message_id
+                    delivered = True
+                else:
+                    # A failed, unrecognised, or malformed receipt does not
+                    # establish persistence. Do not surface its reason: it may
+                    # have been composed from submitted form values.
+                    if persisted_message_id is not None and message_id not in (None, persisted_message_id):
+                        return
+                    terminal_failure = True
+                progress.set()
+            elif (
+                evt == "session:error"
+                and isinstance(metadata, dict)
+                and metadata.get("request_id") == original_request_id
+            ):
+                terminal_failure = True
+                progress.set()
+
+        remove_handler = self.add_event_handler(response_handler)
+        waiters: list[asyncio.Task[bool]] = []
+        try:
+            await self._sio.emit("session:form_to_user", envelope)
+            deadline = asyncio.get_running_loop().time() + timeout
+            while not delivered and not terminal_failure and not disconnect_event.is_set():
+                remaining = deadline - asyncio.get_running_loop().time()
+                if remaining <= 0:
+                    break
+                progress.clear()
+                if delivered or terminal_failure:
+                    break
+                receipt_wait = asyncio.create_task(progress.wait())
+                connection_wait = asyncio.create_task(disconnect_event.wait())
+                waiters = [receipt_wait, connection_wait]
+                await asyncio.wait(waiters, timeout=remaining, return_when=asyncio.FIRST_COMPLETED)
+                for waiter in waiters:
+                    if not waiter.done():
+                        waiter.cancel()
+                await asyncio.gather(*waiters, return_exceptions=True)
+                waiters = []
+            if delivered:
+                return FormSubmissionResult("delivered", persisted_message_id, original_request_id)
+            if persisted_message_id is not None:
+                return FormSubmissionResult("received", persisted_message_id, original_request_id, received_reason)
+            return FormSubmissionResult("unknown", request_id=original_request_id)
+        finally:
+            for waiter in waiters:
+                if not waiter.done():
+                    waiter.cancel()
+            if waiters:
+                await asyncio.gather(*waiters, return_exceptions=True)
+            remove_handler()
+            self._form_submission_pending_keys.discard(submission_key)
+
     async def disconnect(self) -> None:
         self._connected = False
+        self._disconnect_event.set()
         if self._sio:
             await self._sio.disconnect()
             self._sio = None
