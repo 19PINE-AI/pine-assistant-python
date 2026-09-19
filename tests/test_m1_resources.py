@@ -352,6 +352,67 @@ async def test_session_message_errors_keep_codes_and_sanitize_input_state_withou
     assert "sensitive" not in str(timeout.value)
 
 
+@pytest.mark.asyncio
+async def test_async_end_task_uses_close_contract_and_keeps_typed_errors_without_retrying():
+    requests = []
+
+    async def success_handler(request):
+        requests.append(request)
+        assert request.method == "POST"
+        assert request.url.path == "/api/v2/sessions/7/close"
+        return httpx.Response(
+            200,
+            json=success({"session": session("7") | {"state": "task_finished", "finished_status": "user_closed"}}),
+        )
+
+    async with AsyncPineAI(base_url="https://pine.test", http_transport=httpx.MockTransport(success_handler)) as client:
+        closed = await client.sessions.end_task(7)
+        with pytest.raises(ValueError):
+            await client.sessions.end_task(True)
+    assert closed.id == "7"
+    assert closed.state == "task_finished"
+    assert closed.finished_status == "user_closed"
+    assert len(requests) == 1
+
+    async def rejected_handler(_request):
+        return httpx.Response(403, json={"status": "error", "error": {"code": "session_access_denied"}})
+
+    async with AsyncPineAI(base_url="https://pine.test", http_transport=httpx.MockTransport(rejected_handler)) as client:
+        with pytest.raises(SessionError) as rejected:
+            await client.sessions.end_task("7")
+    assert (rejected.value.code, rejected.value.status_code) == ("session_access_denied", 403)
+
+    async def timeout_handler(_request):
+        raise httpx.ReadTimeout("sensitive request URL")
+
+    async with AsyncPineAI(base_url="https://pine.test", http_transport=httpx.MockTransport(timeout_handler)) as client:
+        with pytest.raises(SessionError) as timeout:
+            await client.sessions.end_task("7")
+    assert timeout.value.code == "timeout"
+    assert "sensitive" not in str(timeout.value)
+
+
+def test_sync_end_task_uses_close_contract_and_validates_session_id():
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(
+            200,
+            json=success({"session": session("7") | {"state": "task_finished", "finished_status": "user_closed"}}),
+        )
+
+    with PineAI(base_url="https://pine.test", http_transport=httpx.MockTransport(handler)) as client:
+        closed = client.sessions.end_task("7")
+        with pytest.raises(ValueError):
+            client.sessions.end_task("bad")
+    assert closed.id == "7"
+    assert closed.finished_status == "user_closed"
+    assert len(requests) == 1
+    assert requests[0].method == "POST"
+    assert requests[0].url.path == "/api/v2/sessions/7/close"
+
+
 def test_sync_session_send_and_outcomes_match_async_rest_contract():
     requests = []
 

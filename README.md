@@ -51,6 +51,14 @@ The list call sends `ensure_copilot=false` by default. It is read-only when
 used with a backend that supports this query option; older backends may ignore
 it and retain their legacy Copilot behavior.
 
+Use `await client.sessions.end_task(session_id)` to request a user-ended task;
+the synchronous client provides the same method without `await`. The backend
+checks ownership and eligibility, and the method returns the updated
+`SessionInfo`. This is not proof that the task objective succeeded or that an
+external action has already stopped. The SDK never retries this write: after a
+timeout or server error, query the session and its history before deciding
+whether to retry, because the state may already have changed.
+
 Use `sessions.send_message()` when an application needs the REST write
 acknowledgement without joining Socket.IO. It returns a typed status: `received`
 means the message was persisted, `delivered` means it was handed to the Agent,

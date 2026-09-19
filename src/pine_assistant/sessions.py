@@ -114,6 +114,19 @@ class SessionsAPI:
         except PineAIError as exc:
             raise SessionError(str(exc), exc.code, status_code=exc.status_code) from exc
 
+    async def end_task(self, session_id: str | int) -> SessionInfo:
+        """Request that an eligible continuous session be closed by its user.
+
+        The backend may commit ``user_closed`` before a delivery failure is
+        reported, so callers must query the session before retrying an
+        uncertain request. This method does not retry the write.
+        """
+        try:
+            response = await self._http.post(f"/v2/sessions/{_session_id(session_id)}/close")
+        except PineAIError as exc:
+            raise _session_error(exc) from exc
+        return _parse_session(response.get("session") if isinstance(response, dict) else None)
+
     async def send_message(
         self,
         session_id: str | int,
@@ -247,6 +260,19 @@ class SyncSessionsAPI:
             return _parse_session(self._http.get(f"/v2/sessions/{_session_id(session_id)}"))
         except PineAIError as exc:
             raise SessionError(str(exc), exc.code, status_code=exc.status_code) from exc
+
+    def end_task(self, session_id: str | int) -> SessionInfo:
+        """Request that an eligible continuous session be closed by its user.
+
+        The backend may commit ``user_closed`` before a delivery failure is
+        reported, so callers must query the session before retrying an
+        uncertain request. This method does not retry the write.
+        """
+        try:
+            response = self._http.post(f"/v2/sessions/{_session_id(session_id)}/close")
+        except PineAIError as exc:
+            raise _session_error(exc) from exc
+        return _parse_session(response.get("session") if isinstance(response, dict) else None)
 
     def send_message(
         self,
