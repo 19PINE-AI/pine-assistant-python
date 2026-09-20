@@ -12,6 +12,7 @@ from collections.abc import AsyncGenerator, Callable, Coroutine
 from typing import Any
 
 from pine_assistant.models.events import C2SEvent, S2CEvent
+from pine_assistant.models.form import FormSubmissionResult
 from pine_assistant.transport.socketio import SocketIOManager
 
 # States in which nothing further arrives until something changes outside the
@@ -276,3 +277,14 @@ class ChatEngine:
         safe.
         """
         self._sio.emit(C2SEvent.SESSION_FORM_TO_USER, {"content": form_data}, session_id, message_id)
+
+    async def submit_form_response(
+        self, session_id: str, message_id: str, request_id: str, form_data: dict[str, Any], *, timeout: float,
+    ) -> FormSubmissionResult:
+        return await self._sio.emit_form_response(
+            session_id=session_id,
+            original_message_id=message_id,
+            original_request_id=request_id,
+            content=form_data,
+            timeout=timeout,
+        )

@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0rc1] - 2026-09-18
+
+Internal release candidate for 0.5.0. See [MIGRATION.md](MIGRATION.md) before
+upgrading from any released 0.3.x version or current main's 0.4.0 surface.
+
+### Added
+
+- `AsyncPineAI` now supports `async with` and `aclose()`. `disconnect()` only
+  closes Socket.IO; `aclose()` also closes SDK-owned HTTP resources.
+- Typed REST resources: `auth.me()`, ticket mint/redeem, and validated session
+  list/get responses.
+- Explicit `api_base_path`, `http_client`, and `http_transport` options.
+  Injected HTTP clients remain caller-owned.
+- `PineAI` now has real synchronous REST `auth` and `sessions` resources built
+  on `httpx.Client`.
+
+### Changed
+
+- HTTP errors expose a stable error code and `status_code` without reproducing
+  upstream response bodies.
+- `sessions.list()` sends `ensure_copilot=false` by default when the backend
+  supports that read-only query option.
+
+### Removed
+
+- `PineAI` no longer offers synchronous Socket.IO methods. Use `AsyncPineAI`
+  for realtime connections and streams; the former wrapper owned an event loop
+  and exposed coroutine-backed resources from a synchronous client.
+
 ## [0.4.0] - 2026-08-08
 
 Aligned to the supported protocol scope: the subset of the task-session

@@ -10,12 +10,15 @@ from collections.abc import AsyncGenerator, Callable
 from pathlib import Path
 from typing import Any
 
-from pine_assistant.auth import Auth
+import httpx
+
+from pine_assistant.auth import Auth, SyncAuth
 from pine_assistant.chat import ChatEngine, ChatEvent, Deduplicator, event_from_envelope
 from pine_assistant.errors import ConnectionError
 from pine_assistant.models.events import C2SEvent
-from pine_assistant.sessions import SessionsAPI
-from pine_assistant.transport.http import DEFAULT_BASE_URL, HttpClient
+from pine_assistant.models.form import FormSubmissionResult, FormToUserData, encode_form_answers
+from pine_assistant.sessions import SessionsAPI, SyncSessionsAPI
+from pine_assistant.transport.http import DEFAULT_API_BASE_PATH, DEFAULT_BASE_URL, HttpClient, SyncHttpClient
 from pine_assistant.transport.socketio import SocketIOManager
 
 DEVICE_ID_FILE = Path.home() / ".pine" / "device_id"
@@ -23,6 +26,10 @@ DEVICE_ID_ENV = "PINE_DEVICE_ID"
 
 HISTORY_PAGE_SIZE = 30
 HISTORY_MAX_BYTES = 5_242_880
+HISTORY_MAX_MESSAGES = 100
+HISTORY_MAX_PAGES = 100
+FORM_RESPONSE_TIMEOUT_S = 10.0
+FORM_RESPONSE_MAX_TIMEOUT_S = 30.0
 
 _logger = logging.getLogger(__name__)
 
@@ -72,6 +79,10 @@ class AsyncPineAI:
         device_id: str | None = None,
         transports: list[str] | None = None,
         ready_timeout: float = 15.0,
+        *,
+        api_base_path: str = DEFAULT_API_BASE_PATH,
+        http_client: httpx.AsyncClient | None = None,
+        http_transport: httpx.AsyncBaseTransport | None = None,
     ):
         self._base_url = base_url
         self._access_token = access_token
@@ -80,7 +91,13 @@ class AsyncPineAI:
         self._transports = transports
         self._ready_timeout = ready_timeout
 
-        self.http = HttpClient(base_url=base_url, token=access_token)
+        self.http = HttpClient(
+            base_url=base_url,
+            token=access_token,
+            api_base_path=api_base_path,
+            client=http_client,
+            transport=http_transport,
+        )
         self.auth = Auth(self.http)
         self.sessions = SessionsAPI(self.http)
 
@@ -90,6 +107,12 @@ class AsyncPineAI:
     @property
     def connected(self) -> bool:
         return self._sio is not None and self._sio.connected
+
+    async def __aenter__(self) -> "AsyncPineAI":
+        return self
+
+    async def __aexit__(self, *_exc_info: object) -> None:
+        await self.aclose()
 
     async def connect(self, access_token: str | None = None, user_id: str | None = None) -> None:
         token = access_token or self._access_token
@@ -106,14 +129,22 @@ class AsyncPineAI:
             transports=self._transports,
             ready_timeout=self._ready_timeout,
         )
-        self._chat = ChatEngine(self._sio, check_session_state=self.sessions.get)
+        self._chat = ChatEngine(self._sio, check_session_state=self._session_state)
         await self._sio.connect()
 
     async def disconnect(self) -> None:
+        """Disconnect real-time Socket.IO only; the REST client stays usable."""
         if self._sio:
             await self._sio.disconnect()
             self._sio = None
             self._chat = None
+
+    async def aclose(self) -> None:
+        """Release Socket.IO and SDK-owned HTTP resources, even if either fails."""
+        try:
+            await self.disconnect()
+        finally:
+            await self.http.close()
 
     async def join_session(self, session_id: str) -> dict[str, Any]:
         """Enter a session — must be called before chatting.
@@ -153,19 +184,23 @@ class AsyncPineAI:
         deliberately.
         """
         self._ensure_connected()
+        if isinstance(max_messages, bool) or not isinstance(max_messages, int) or not 1 <= max_messages <= HISTORY_MAX_MESSAGES:
+            raise ValueError(f"max_messages must be between 1 and {HISTORY_MAX_MESSAGES}")
+        if order.upper() not in ("ASC", "DESC"):
+            raise ValueError("order must be ASC or DESC")
         return await self._sio.emit_and_wait(  # type: ignore[union-attr]
             C2SEvent.SESSION_HISTORY,
             {
                 "max_messages": max_messages,
                 "max_bytes": HISTORY_MAX_BYTES,
-                "order": order,
+                "order": order.upper(),
                 "from_message_id": from_message_id,
             },
             session_id=session_id,
         )
 
     async def rebuild(
-        self, session_id: str, *, page_size: int = HISTORY_PAGE_SIZE, max_pages: int = 100,
+        self, session_id: str, *, page_size: int = HISTORY_PAGE_SIZE, max_pages: int = HISTORY_MAX_PAGES,
     ) -> list[dict[str, Any]]:
         """Rebuild a session's messages from history, unconditionally.
 
@@ -176,6 +211,8 @@ class AsyncPineAI:
         Messages of every type are returned, including ones outside the
         supported scope; filtering is the caller's to do.
         """
+        if isinstance(max_pages, bool) or not isinstance(max_pages, int) or not 1 <= max_pages <= HISTORY_MAX_PAGES:
+            raise ValueError(f"max_pages must be between 1 and {HISTORY_MAX_PAGES}")
         messages: list[dict[str, Any]] = []
         cursor: str | None = None
         for _ in range(max_pages):
@@ -189,6 +226,76 @@ class AsyncPineAI:
             "the returned history is incomplete.", session_id, max_pages,
         )
         return messages
+
+    async def _find_form_request(
+        self, session_id: str, message_id: str, *, deadline: float,
+    ) -> dict[str, Any]:
+        """Locate one agent-authored form request in bounded persisted history."""
+        cursor: str | None = None
+        for _ in range(HISTORY_MAX_PAGES):
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                raise TimeoutError("timed out locating the persisted form request")
+            page = await asyncio.wait_for(
+                self.get_history(session_id, max_messages=HISTORY_PAGE_SIZE, order="DESC", from_message_id=cursor),
+                timeout=remaining,
+            )
+            for message in page.get("messages") or []:
+                if not isinstance(message, dict):
+                    continue
+                payload = message.get("payload")
+                metadata = message.get("metadata")
+                source = metadata.get("source") if isinstance(metadata, dict) else None
+                if (
+                    message.get("type") == C2SEvent.SESSION_FORM_TO_USER
+                    and isinstance(payload, dict)
+                    and str(payload.get("message_id")) == message_id
+                    and isinstance(metadata, dict)
+                    and isinstance(source, dict)
+                    and source.get("role") == "agent"
+                    and isinstance(metadata.get("request_id"), str)
+                    and metadata["request_id"]
+                ):
+                    return message
+            cursor = page.get("next_message_id") or None
+            if not cursor:
+                break
+        raise ValueError("form request is not available in bounded session history")
+
+    async def submit_form_response(
+        self,
+        session_id: str,
+        message_id: str,
+        answers: dict[str, Any],
+        *,
+        timeout: float = FORM_RESPONSE_TIMEOUT_S,
+    ) -> FormSubmissionResult:
+        """Submit answers to a persisted agent form request.
+
+        The original request is re-read from authenticated history. Its message
+        ID and request ID are the only association used on the wire; callers
+        cannot supply PII metadata or form definitions. The result reports only
+        observed persistence and delivery, never a Socket.IO ACK.
+        """
+        self._ensure_connected()
+        if not 0 < timeout <= FORM_RESPONSE_MAX_TIMEOUT_S:
+            raise ValueError(f"timeout must be between 0 and {FORM_RESPONSE_MAX_TIMEOUT_S} seconds")
+        deadline = asyncio.get_running_loop().time() + timeout
+        original = await self._find_form_request(session_id, message_id, deadline=deadline)
+        payload = original["payload"]
+        metadata = original["metadata"]
+        try:
+            form = FormToUserData.model_validate(payload.get("data"))
+            content = encode_form_answers(form.form, answers)
+        except (TypeError, ValueError):
+            # Do not attach answer values to failures: form values can be PII.
+            raise ValueError("form response does not match the persisted form") from None
+        remaining = deadline - asyncio.get_running_loop().time()
+        if remaining <= 0:
+            raise TimeoutError("timed out before form response could be submitted")
+        return await self._chat.submit_form_response(  # type: ignore[union-attr]
+            session_id, message_id, metadata["request_id"], content, timeout=remaining,
+        )
 
     async def chat(
         self,
@@ -286,12 +393,11 @@ class AsyncPineAI:
             self.leave_session(sid)
 
     def send_form_response(self, session_id: str, message_id: str, form_data: dict[str, Any]) -> None:
-        """Answer a `session:form_to_user` request.
+        """Deprecated fire-and-forget form response.
 
-        Submit only values the user supplied. The format has no representation
-        for refusal and an empty submission is indistinguishable from empty
-        answers, so a fabricated answer may be acted on. Sending nothing is
-        safe.
+        Use :meth:`submit_form_response`, which verifies the original form and
+        reports persisted delivery. This legacy method intentionally remains
+        synchronous for compatibility and cannot provide either guarantee.
         """
         self._ensure_connected()
         self._chat.send_form_response(session_id, message_id, form_data)  # type: ignore[union-attr]
@@ -316,90 +422,46 @@ class AsyncPineAI:
         if not self._chat or not self._sio or not self._sio.connected:
             raise ConnectionError("Not connected. Call connect() first.")
 
+    async def _session_state(self, session_id: str) -> dict[str, Any]:
+        """Adapt the typed REST resource to the legacy realtime pre-check."""
+        return (await self.sessions.get(session_id)).model_dump()
+
 
 class PineAI:
-    """Sync wrapper around AsyncPineAI. Runs the event loop internally."""
+    """Synchronous Pine REST client.
 
-    def __init__(self, **kwargs: Any):
-        self._async = AsyncPineAI(**kwargs)
-        self._loop = asyncio.new_event_loop()
+    REST resources return concrete values through ``httpx.Client``. Real-time
+    Socket.IO requires an event loop and is intentionally available only on
+    :class:`AsyncPineAI`; this client does not create a hidden loop or thread.
+    """
 
-    def _run(self, coro: Any) -> Any:
-        return self._loop.run_until_complete(coro)
-
-    @property
-    def auth(self) -> Auth:
-        return self._async.auth
-
-    @property
-    def sessions(self) -> SessionsAPI:
-        return self._async.sessions
-
-    @property
-    def connected(self) -> bool:
-        return self._async.connected
-
-    def connect(self, **kwargs: Any) -> None:
-        self._run(self._async.connect(**kwargs))
-
-    def disconnect(self) -> None:
-        self._run(self._async.disconnect())
-
-    def join_session(self, session_id: str) -> dict[str, Any]:
-        return self._run(self._async.join_session(session_id))
-
-    def leave_session(self, session_id: str) -> None:
-        self._async.leave_session(session_id)
-
-    def get_history(self, session_id: str, **kwargs: Any) -> dict[str, Any]:
-        return self._run(self._async.get_history(session_id, **kwargs))
-
-    def rebuild(self, session_id: str, **kwargs: Any) -> list[dict[str, Any]]:
-        return self._run(self._async.rebuild(session_id, **kwargs))
-
-    def chat_sync(
+    def __init__(
         self,
-        session_id: str,
-        content: str,
+        access_token: str | None = None,
+        base_url: str = DEFAULT_BASE_URL,
         *,
-        attachments: list[dict[str, Any]] | None = None,
-        referenced_sessions: list[dict[str, str]] | None = None,
-        turn_timeout: float | None = None,
-    ) -> list[ChatEvent]:
-        """Send a message and return all events as a list (blocking)."""
-        async def _collect() -> list[ChatEvent]:
-            events = []
-            async for event in self._async.chat(
-                session_id, content,
-                attachments=attachments,
-                referenced_sessions=referenced_sessions,
-                turn_timeout=turn_timeout,
-            ):
-                events.append(event)
-            return events
-        return self._run(_collect())
-
-    def send_message(
-        self,
-        session_id: str,
-        content: str,
-        *,
-        attachments: list[dict[str, Any]] | None = None,
-        referenced_sessions: list[dict[str, str]] | None = None,
+        api_base_path: str = DEFAULT_API_BASE_PATH,
+        http_client: httpx.Client | None = None,
+        http_transport: httpx.BaseTransport | None = None,
     ) -> None:
-        """Send a message without waiting for events (fire-and-forget)."""
-        self._async.send_message(
-            session_id, content,
-            attachments=attachments,
-            referenced_sessions=referenced_sessions,
+        self.http = SyncHttpClient(
+            base_url=base_url,
+            token=access_token,
+            api_base_path=api_base_path,
+            client=http_client,
+            transport=http_transport,
         )
+        self.auth = SyncAuth(self.http)
+        self.sessions = SyncSessionsAPI(self.http)
 
-    def send_form_response(self, session_id: str, message_id: str, form_data: dict[str, Any]) -> None:
-        self._async.send_form_response(session_id, message_id, form_data)
+    def __enter__(self) -> "PineAI":
+        return self
 
-    def emit_event(
-        self, event_type: str, data: Any, session_id: str, message_id: str | None = None,
-    ) -> None:
-        self._async.emit_event(event_type, data, session_id, message_id)
+    def __exit__(self, *_exc_info: object) -> None:
+        self.close()
+
+    def close(self) -> None:
+        """Close the SDK-owned synchronous HTTP client."""
+        self.http.close()
 
     session_url = staticmethod(AsyncPineAI.session_url)

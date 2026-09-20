@@ -19,20 +19,106 @@ pip install pine-assistant[cli]     # SDK + CLI
 from pine_assistant import AsyncPineAI
 
 client = AsyncPineAI(access_token="...", user_id="...")
-await client.connect()
+async with client:
+    await client.connect()
 
-session = await client.sessions.create()
-await client.join_session(session["id"])
-await client.rebuild(session["id"])          # load the session's messages
+    session = await client.sessions.create()
+    await client.join_session(session["id"])
+    await client.rebuild(session["id"])          # load the session's messages
 
-async for event in client.chat(session["id"], "Negotiate my Comcast bill",
-                               turn_timeout=120):
-    print(event.type, event.data)
-
-await client.disconnect()
+    async for event in client.chat(session["id"], "Negotiate my Comcast bill",
+                                   turn_timeout=120):
+        print(event.type, event.data)
 ```
 
 A client tracks one session. Concurrent sessions need one client each.
+
+`disconnect()` only ends the real-time connection. `aclose()` (including the
+end of `async with`) also releases the SDK-owned HTTP client. If you pass an
+`httpx.AsyncClient`, it remains your responsibility to close it. Use
+`api_base_path` to select an API prefix; it defaults to `/api` for compatibility.
+
+## REST identity and sessions
+
+```python
+async with AsyncPineAI(access_token="...") as client:
+    identity = await client.auth.me()               # AuthIdentity(user_id="...")
+    sessions = await client.sessions.list(limit=20) # SessionListResponse
+    session = await client.sessions.get("123")     # SessionInfo
+```
+
+The list call sends `ensure_copilot=false` by default. It is read-only when
+used with a backend that supports this query option; older backends may ignore
+it and retain their legacy Copilot behavior.
+
+Use `await client.sessions.end_task(session_id)` to request a user-ended task;
+the synchronous client provides the same method without `await`. The backend
+checks ownership and eligibility, and the method returns the updated
+`SessionInfo`. This is not proof that the task objective succeeded or that an
+external action has already stopped. The SDK never retries this write: after a
+timeout or server error, query the session and its history before deciding
+whether to retry, because the state may already have changed.
+
+Use `sessions.send_message()` when an application needs the REST write
+acknowledgement without joining Socket.IO. It returns a typed status: `received`
+means the message was persisted, `delivered` means it was handed to the Agent,
+and `delivery_failed` means that handoff failed. None means that a task has
+finished. A timeout or connection error leaves persistence unknown, so the SDK
+never retries a send; recover Socket history before deciding what to do next.
+
+```python
+status = await client.sessions.send_message(
+    "123", "Continue the task", request_id="ui-click-42",
+)
+if status.status == "delivered":
+    print(status.message_id, status.revision)
+
+outcomes = await client.sessions.outcomes("123")
+for outcome in outcomes.items:
+    print(outcome.outcome_id, outcome.outcome_narrative)
+```
+
+`outcomes()` returns newest-first persisted Outcomes. Follow `next_cursor` to
+request older pages with `before=...`; `total` is a first-page snapshot and is
+not a pagination signal.
+
+For structured form answers, use the async method on a connected client:
+
+```python
+await client.connect()
+try:
+    receipt = await client.submit_form_response(
+        "123", "456", {"contact_name": "Example User"},
+    )
+finally:
+    await client.disconnect()
+```
+
+The method re-reads the original agent form from authenticated history, preserves
+its message and request IDs, validates visible required fields, and JSON-encodes
+array answers like the web app. Callers cannot override field privacy levels.
+The backend's `session:message_status` receipt supplies the persisted reply ID:
+`delivered` means it reached the agent and `received` means it was persisted but
+delivery was not observed before the deadline. `unknown` requires checking
+history before deciding whether to submit again. Each Socket.IO connection sends
+a form only once because a late receipt cannot identify an attempt; reconnects
+never retry or replay form submissions. A transport ACK is not a delivery
+receipt. The legacy synchronous `send_form_response()` is deprecated because it
+cannot verify the original form request.
+
+## Quick Start (Sync REST)
+
+`PineAI` is a synchronous REST client. It returns values directly for auth and
+session resources; use `AsyncPineAI` for Socket.IO and streaming.
+
+```python
+from pine_assistant import PineAI
+
+with PineAI(access_token="...") as client:
+    print(client.auth.me().user_id)
+    for session in client.sessions.list(limit=20).sessions:
+        print(session.id, session.title)
+```
 
 ## Quick Start (CLI)
 
