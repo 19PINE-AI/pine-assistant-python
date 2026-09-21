@@ -13,6 +13,12 @@ pip install pine-assistant          # SDK only
 pip install pine-assistant[cli]     # SDK + CLI
 ```
 
+For unreleased work, install from the repository — any branch or commit:
+
+```bash
+pip install "git+https://github.com/19PINE-AI/pine-assistant-python@main"
+```
+
 ## Quick Start (Async)
 
 ```python
