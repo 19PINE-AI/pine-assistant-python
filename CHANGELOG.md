@@ -18,7 +18,8 @@ project adheres to [Semantic Versioning](https://semver.org/).
   `Pine-Managed-User` header, the Socket.IO handshake sends
   `{"token", "managed_user"}`, and `connect()` resolves the Pine user ID through
   `auth.me()`. Injected HTTP clients cannot add or override that header.
-- `client_name` adds a `Pine-Client` header to every REST request.
+- `client_name` adds a `Pine-Client` header to every REST request and to the
+  Socket.IO handshake.
 
 ## [0.5.0rc1] - 2026-09-18
 

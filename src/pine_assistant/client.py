@@ -105,7 +105,8 @@ class AsyncPineAI:
     managed user: every user-scoped REST request carries the key and a
     ``Pine-Managed-User`` header, the Socket.IO handshake carries both, and
     ``connect()`` resolves the managed user's Pine user ID itself.
-    ``client_name`` adds a ``Pine-Client`` header to every REST request.
+    ``client_name`` adds a ``Pine-Client`` header to every REST request and
+    to the Socket.IO handshake.
     """
 
     def __init__(
@@ -129,6 +130,7 @@ class AsyncPineAI:
         self._access_token = access_token
         self._user_id = user_id
         self._managed_user = managed_user
+        self._client_name = client_name
         self._device_id = _get_or_create_device_id(device_id)
         self._transports = transports
         self._ready_timeout = ready_timeout
@@ -185,6 +187,7 @@ class AsyncPineAI:
             transports=self._transports,
             ready_timeout=self._ready_timeout,
             managed_user=self._managed_user,
+            client_name=self._client_name,
         )
         self._chat = ChatEngine(self._sio, check_session_state=self._session_state)
         await self._sio.connect()

@@ -149,8 +149,9 @@ async with AsyncPineAI(api_key=api_key, managed_user="usr_01J9Z3K8QF") as client
 ```
 
 `PineAI` accepts the same `api_key` and `managed_user` for synchronous REST.
-`client_name="..."` adds a `Pine-Client` header that the backend records as
-the request source. Platform API failures raise `PlatformError` with a stable
+`client_name="..."` sends a `Pine-Client` header on REST requests and on the
+Socket.IO handshake. The backend records it as the source only for requests
+made with a tenant key, and only the value `mcp`; it changes no behavior. Platform API failures raise `PlatformError` with a stable
 `code` and `status_code` (for example 401 for a bad key, 403 for a suspended
 integration, 404 `platform_managed_user_not_found`, 409
 `platform_managed_user_limit_reached`); like every SDK error, it never

@@ -89,24 +89,33 @@ def _json_data(response: httpx.Response) -> Any:
     return payload
 
 
-def _identity_headers(
-    http: "HttpClient | SyncHttpClient", authenticated: bool, token: str | None, as_tenant: bool = False
-) -> dict[str, str]:
-    """Headers naming who a request acts as.
+class _RequestIdentity:
+    """The credential, managed user and client name shared by the sync and async transports."""
 
-    The managed user belongs to the client's own API key, so it is sent only
-    with that key, never with a per-request ``token`` override, and never on
-    Platform API requests the tenant makes as itself (``as_tenant``).
-    """
-    headers: dict[str, str] = {"Content-Type": "application/json"}
-    actual_token = http._token if token is None else token
-    if authenticated and actual_token:
-        headers["Authorization"] = f"Bearer {actual_token}"
-        if token is None and http._managed_user and not as_tenant:
-            headers[MANAGED_USER_HEADER] = http._managed_user
-    if http._client_name:
-        headers[CLIENT_HEADER] = http._client_name
-    return headers
+    def __init__(self, token: str | None, managed_user: str | None, client_name: str | None) -> None:
+        self._token = token
+        self._managed_user = managed_user
+        self._client_name = client_name
+
+    def set_token(self, token: str | None) -> None:
+        self._token = token
+
+    def _auth_headers(self, authenticated: bool, token: str | None = None, as_tenant: bool = False) -> dict[str, str]:
+        """Headers naming who a request acts as.
+
+        The managed user belongs to the client's own API key, so it is sent only
+        with that key, never with a per-request ``token`` override, and never on
+        Platform API requests the tenant makes as itself (``as_tenant``).
+        """
+        headers: dict[str, str] = {"Content-Type": "application/json"}
+        actual_token = self._token if token is None else token
+        if authenticated and actual_token:
+            headers["Authorization"] = f"Bearer {actual_token}"
+            if token is None and self._managed_user and not as_tenant:
+                headers[MANAGED_USER_HEADER] = self._managed_user
+        if self._client_name:
+            headers[CLIENT_HEADER] = self._client_name
+        return headers
 
 
 def _enforce_identity(request: httpx.Request, headers: dict[str, str]) -> None:
@@ -118,7 +127,7 @@ def _enforce_identity(request: httpx.Request, headers: dict[str, str]) -> None:
             request.headers.pop(name, None)
 
 
-class HttpClient:
+class HttpClient(_RequestIdentity):
     """Async HTTP client; injected clients remain caller-owned."""
 
     def __init__(
@@ -135,10 +144,8 @@ class HttpClient:
     ):
         if client is not None and transport is not None:
             raise ValueError("pass either client or transport, not both")
+        super().__init__(token, managed_user, client_name)
         self._api_base_url = _api_url(base_url, api_base_path)
-        self._token = token
-        self._managed_user = managed_user
-        self._client_name = client_name
         self._owns_client = client is None
         self._client = client or httpx.AsyncClient(
             headers={"User-Agent": _USER_AGENT, "Accept": "application/json"},
@@ -147,11 +154,6 @@ class HttpClient:
             follow_redirects=False,
         )
 
-    def set_token(self, token: str | None) -> None:
-        self._token = token
-
-    def _auth_headers(self, authenticated: bool, token: str | None = None, as_tenant: bool = False) -> dict[str, str]:
-        return _identity_headers(self, authenticated, token, as_tenant)
 
     def _url(self, path: str) -> str:
         # Absolute paths keep an injected client's base_url from changing the
@@ -227,7 +229,7 @@ class HttpClient:
             await self._client.aclose()
 
 
-class SyncHttpClient:
+class SyncHttpClient(_RequestIdentity):
     """Synchronous REST transport with the same serialization and error rules."""
 
     def __init__(
@@ -244,10 +246,8 @@ class SyncHttpClient:
     ) -> None:
         if client is not None and transport is not None:
             raise ValueError("pass either client or transport, not both")
+        super().__init__(token, managed_user, client_name)
         self._api_base_url = _api_url(base_url, api_base_path)
-        self._token = token
-        self._managed_user = managed_user
-        self._client_name = client_name
         self._owns_client = client is None
         self._client = client or httpx.Client(
             headers={"User-Agent": _USER_AGENT, "Accept": "application/json"},
@@ -256,11 +256,6 @@ class SyncHttpClient:
             follow_redirects=False,
         )
 
-    def set_token(self, token: str | None) -> None:
-        self._token = token
-
-    def _auth_headers(self, authenticated: bool, token: str | None = None, as_tenant: bool = False) -> dict[str, str]:
-        return _identity_headers(self, authenticated, token, as_tenant)
 
     def _url(self, path: str) -> str:
         return f"{self._api_base_url}/{path.lstrip('/')}"

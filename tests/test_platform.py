@@ -38,6 +38,7 @@ class FakeBackend:
     base_url: str = ""
     requests: list[dict[str, Any]] = field(default_factory=list)
     handshakes: list[Any] = field(default_factory=list)
+    handshake_clients: list[str | None] = field(default_factory=list)
     envelopes: list[dict[str, Any]] = field(default_factory=list)
     error_status: int | None = None
     existing: bool = False
@@ -48,8 +49,9 @@ class FakeBackend:
         sio.attach(app, socketio_path="/api/v2/socket.io/")
 
         @sio.event
-        async def connect(sid, _environ, auth):
+        async def connect(sid, environ, auth):
             self.handshakes.append(auth)
+            self.handshake_clients.append(environ.get("HTTP_PINE_CLIENT"))
             await sio.emit("ready", {}, to=sid)
 
         @sio.on("session:history")
@@ -150,7 +152,18 @@ async def test_managed_user_connect_resolves_user_once_and_sends_handshake(backe
     assert backend.requests[0]["headers"]["Pine-Managed-User"] == EXTERNAL_ID
     assert "Pine-Client" not in backend.requests[0]["headers"]
     assert backend.handshakes == [{"token": API_KEY, "managed_user": EXTERNAL_ID}] * 2
+    assert backend.handshake_clients == [None, None]
     assert backend.envelopes[0]["metadata"]["source"]["user_id"] == PINE_USER_ID
+
+
+@pytest.mark.asyncio
+async def test_client_name_is_sent_on_the_socketio_handshake(backend):
+    async with AsyncPineAI(
+        api_key=API_KEY, managed_user=EXTERNAL_ID, client_name="mcp", base_url=backend.base_url,
+    ) as client:
+        await client.connect()
+    assert backend.requests[0]["headers"]["Pine-Client"] == "mcp"
+    assert backend.handshake_clients == ["mcp"]
 
 
 @pytest.mark.asyncio
