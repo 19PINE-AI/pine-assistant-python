@@ -1,7 +1,8 @@
 """
 Socket.IO connection manager — spec sections 3.1, 5.1.2.
 
-Connection: wss://{baseUrl}/api/v2/socket.io/ with auth={token}.
+Connection: wss://{baseUrl}/api/v2/socket.io/ with auth={token}, plus
+managed_user when a Platform API key acts for a managed user.
 Waits for `ready` event before resolving connect().
 """
 
@@ -41,9 +42,11 @@ class SocketIOManager:
         device_id: str | None = None,
         transports: list[str] | None = None,
         ready_timeout: float = 15.0,
+        managed_user: str | None = None,
     ):
         self._base_url = base_url
         self._token = token
+        self._managed_user = managed_user
         self._user_id = user_id
         self._device_id = device_id or str(uuid.uuid4())
         self._transports = transports or ["websocket"]
@@ -144,7 +147,7 @@ class SocketIOManager:
         try:
             await self._sio.connect(
                 self._base_url,
-                auth={"token": self._token},
+                auth=self._handshake_auth(),
                 transports=self._transports,
                 socketio_path=SOCKETIO_PATH,
                 wait_timeout=self._ready_timeout,
@@ -189,6 +192,12 @@ class SocketIOManager:
             for key, generation in self._form_submission_attempts.items()
             if key in self._form_submission_pending_keys
         }
+
+    def _handshake_auth(self) -> dict[str, str]:
+        auth = {"token": self._token}
+        if self._managed_user:
+            auth["managed_user"] = self._managed_user
+        return auth
 
     def _track_membership(self, event_type: str, session_id: str | None) -> None:
         """Remember which sessions to re-join after a reconnect.

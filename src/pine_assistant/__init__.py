@@ -12,7 +12,7 @@ them. `is_supported_event` tells the two apart.
 from pine_assistant.auth import Auth, SyncAuth
 from pine_assistant.chat import ChatEvent
 from pine_assistant.client import AsyncPineAI, PineAI
-from pine_assistant.errors import AuthError, ConnectionError, PineAIError, SessionError
+from pine_assistant.errors import AuthError, ConnectionError, PineAIError, PlatformError, SessionError
 from pine_assistant.models.auth import AuthIdentity, AuthTicket, RedeemedTicket
 from pine_assistant.models.events import (
     SUPPORTED_EVENTS,
@@ -20,6 +20,7 @@ from pine_assistant.models.events import (
     S2CEvent,
     is_supported_event,
 )
+from pine_assistant.models.platform import ManagedUser
 from pine_assistant.models.session import (
     SessionInfo,
     SessionListResponse,
@@ -28,6 +29,7 @@ from pine_assistant.models.session import (
     SessionOutcomeRating,
     SessionOutcomesPage,
 )
+from pine_assistant.platform_api import ManagedUsersAPI, PlatformAPI, SyncManagedUsersAPI, SyncPlatformAPI
 from pine_assistant.sessions import SessionsAPI, SyncSessionsAPI
 
 __version__ = "0.5.0rc1"
@@ -38,6 +40,11 @@ __all__ = [
     "SyncAuth",
     "SessionsAPI",
     "SyncSessionsAPI",
+    "PlatformAPI",
+    "SyncPlatformAPI",
+    "ManagedUsersAPI",
+    "SyncManagedUsersAPI",
+    "ManagedUser",
     "AuthIdentity",
     "AuthTicket",
     "RedeemedTicket",
@@ -51,6 +58,7 @@ __all__ = [
     "PineAIError",
     "AuthError",
     "SessionError",
+    "PlatformError",
     "ConnectionError",
     "C2SEvent",
     "S2CEvent",
