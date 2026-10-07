@@ -106,6 +106,79 @@ never retry or replay form submissions. A transport ACK is not a delivery
 receipt. The legacy synchronous `send_form_response()` is deprecated because it
 cannot verify the original form request.
 
+## Integrating as an enterprise (Platform API)
+
+A Pine Platform integration (a *tenant*) holds a secret key, `pine_sk_live_...`
+in production or `pine_sk_test_...` elsewhere. Keep it on your servers: read it
+from an environment variable or secret store, and never ship it in browser,
+mobile or other client-side code, prompts, or logs. Each end user of your
+product becomes a *managed user*, identified by your own `external_id`
+(1-128 of letters, digits, `.`, `_`, `:`, `|`, `-`, not starting with `.`; no
+personal data).
+
+Create the managed user once. The call is idempotent per `external_id`: a
+repeat returns the stored user unchanged, even if the profile you send differs.
+`phone` is optional, in E.164 form, and must be a number you have verified.
+
+```python
+import os
+
+from pine_assistant import AsyncPineAI
+
+api_key = os.environ["PINE_API_KEY"]
+
+async with AsyncPineAI(api_key=api_key) as tenant:
+    user = await tenant.platform.managed_users.create(
+        "usr_01J9Z3K8QF",
+        email="ada@example.com",
+        name="Ada Lovelace",
+        phone="+14155550100",
+    )
+    same_user = await tenant.platform.managed_users.get("usr_01J9Z3K8QF")
+```
+
+Then act as that user with `managed_user`. Every user-scoped REST request sends
+the key plus a `Pine-Managed-User` header, and the Socket.IO handshake sends
+both; `connect()` looks up the user's Pine user ID once through `auth.me()`.
+Two restrictions apply. Every error below subclasses `PineAIError` and carries
+`code` and `status_code`:
+
+- `client.auth.mint_ticket()` always fails with 403
+  `platform_route_not_allowed`, raised as `AuthError`. Managed users cannot mint
+  login tickets.
+- While the backend's managed-user access switch is off, every user-scoped call
+  fails with 403 `platform_managed_user_access_disabled`. The exception type is
+  the resource's usual one: `SessionError` from `sessions.*`, `AuthError` from
+  `auth.*` and from `connect()`, which reads `auth.me()` first.
+
+Billing and admission can also reject sessions and chat for a managed user:
+402 `platform_spend_limit_reached`, 403 `platform_access_suspended` or
+`platform_managed_user_unavailable`, 409 `platform_session_state_conflict`, 409
+`platform_session_limit_reached` from `sessions.start` when the running-task
+limit is reached, and 429 when the tenant quota is exhausted.
+
+```python
+async with AsyncPineAI(
+    api_key=api_key, managed_user="usr_01J9Z3K8QF",
+) as client:
+    session = await client.sessions.create()
+    await client.connect()
+    await client.join_session(session["id"])
+    message = "Call my dentist to move Tuesday's appointment"
+    async for event in client.chat(session["id"], message):
+        print(event.type, event.data)
+```
+
+`PineAI` accepts the same `api_key` and `managed_user` for synchronous REST.
+`client_name="..."` sends a `Pine-Client` header on REST requests and on the
+Socket.IO handshake. The backend records it as the source only for requests made
+with a tenant key, and only the value `mcp`; it changes no behavior. Platform
+API failures raise `PlatformError` with a stable `code` and `status_code` (for
+example 401 for a bad key, 403 for a suspended integration, 404
+`platform_managed_user_not_found`, 409 `platform_managed_user_limit_reached`);
+like every SDK error, it never reproduces the upstream body, the key or the
+`external_id`.
+
 ## Quick Start (Sync REST)
 
 `PineAI` is a synchronous REST client. It returns values directly for auth and

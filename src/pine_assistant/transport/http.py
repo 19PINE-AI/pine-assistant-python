@@ -11,6 +11,9 @@ from pine_assistant.errors import PineAIError
 DEFAULT_BASE_URL = "https://www.19pine.ai"
 DEFAULT_API_BASE_PATH = "/api"
 _USER_AGENT = "pine-assistant-sdk"
+MANAGED_USER_HEADER = "Pine-Managed-User"
+CLIENT_HEADER = "Pine-Client"
+_IDENTITY_HEADERS = ("Authorization", MANAGED_USER_HEADER, CLIENT_HEADER)
 
 # Public HTTPX timeout inputs accepted by both sync and async clients.  HTTPX's
 # internal ``TimeoutTypes`` alias is not exported in every supported release.
@@ -87,7 +90,47 @@ def _json_data(response: httpx.Response) -> Any:
     return payload
 
 
-class HttpClient:
+class _RequestIdentity:
+    """The credential, managed user and client name shared by the sync and async transports."""
+
+    def __init__(self, token: str | None, managed_user: str | None, client_name: str | None) -> None:
+        self._token = token
+        self._managed_user = managed_user
+        # A managed user is bound to the API key it was configured with and is
+        # never asserted with any other token, e.g. one installed by set_token().
+        self._managed_user_key = token if managed_user else None
+        self._client_name = client_name
+
+    def set_token(self, token: str | None) -> None:
+        self._token = token
+
+    def _identity(self, authenticated: bool, token: str | None, as_tenant: bool) -> dict[str, str]:
+        """The identity headers a request carries; Platform requests the tenant makes as itself omit the user."""
+        identity: dict[str, str] = {}
+        actual_token = self._token if token is None else token
+        if authenticated and actual_token:
+            identity["Authorization"] = f"Bearer {actual_token}"
+            if self._managed_user and actual_token == self._managed_user_key and not as_tenant:
+                identity[MANAGED_USER_HEADER] = self._managed_user
+        if self._client_name:
+            identity[CLIENT_HEADER] = self._client_name
+        return identity
+
+    @staticmethod
+    def _apply_identity(request: httpx.Request, identity: dict[str, str]) -> None:
+        """Make the identity headers exactly the computed ones.
+
+        Applied last, so neither an injected client's defaults nor caller
+        headers can authenticate a request or choose who it acts as.
+        """
+        for name in _IDENTITY_HEADERS:
+            if name in identity:
+                request.headers[name] = identity[name]
+            else:
+                request.headers.pop(name, None)
+
+
+class HttpClient(_RequestIdentity):
     """Async HTTP client; injected clients remain caller-owned."""
 
     def __init__(
@@ -99,11 +142,13 @@ class HttpClient:
         client: httpx.AsyncClient | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
         timeout: TimeoutConfig = 30.0,
+        managed_user: str | None = None,
+        client_name: str | None = None,
     ):
         if client is not None and transport is not None:
             raise ValueError("pass either client or transport, not both")
+        super().__init__(token, managed_user, client_name)
         self._api_base_url = _api_url(base_url, api_base_path)
-        self._token = token
         self._owns_client = client is None
         self._client = client or httpx.AsyncClient(
             headers={"User-Agent": _USER_AGENT, "Accept": "application/json"},
@@ -112,15 +157,6 @@ class HttpClient:
             follow_redirects=False,
         )
 
-    def set_token(self, token: str | None) -> None:
-        self._token = token
-
-    def _auth_headers(self, authenticated: bool, token: str | None = None) -> dict[str, str]:
-        headers: dict[str, str] = {"Content-Type": "application/json"}
-        actual_token = self._token if token is None else token
-        if authenticated and actual_token:
-            headers["Authorization"] = f"Bearer {actual_token}"
-        return headers
 
     def _url(self, path: str) -> str:
         # Absolute paths keep an injected client's base_url from changing the
@@ -138,11 +174,10 @@ class HttpClient:
         token: str | None = None,
         files: Any = None,
         extra_headers: dict[str, str] | None = None,
+        as_tenant: bool = False,
     ) -> Any:
-        actual_token = self._token if token is None else token
-        headers = self._auth_headers(authenticated, token)
-        if extra_headers:
-            headers.update(extra_headers)
+        identity = self._identity(authenticated, token, as_tenant)
+        headers = {"Content-Type": "application/json", **(extra_headers or {})}
         if files is not None:
             # httpx must generate the multipart boundary itself.
             headers.pop("Content-Type", None)
@@ -150,12 +185,7 @@ class HttpClient:
             request = self._client.build_request(
                 method, self._url(path), json=body, params=params, headers=headers, files=files,
             )
-            # An injected client may carry default authentication. Never let it
-            # authenticate an anonymous request or a request for another user.
-            if authenticated and actual_token:
-                request.headers["Authorization"] = f"Bearer {actual_token}"
-            else:
-                request.headers.pop("Authorization", None)
+            self._apply_identity(request, identity)
             response = await self._client.send(request, follow_redirects=False, auth=None)
         except httpx.TimeoutException as exc:
             raise PineAIError("timeout", "Pine API request timed out") from exc
@@ -164,13 +194,17 @@ class HttpClient:
         return _json_data(response)
 
     async def get(self, path: str, authenticated: bool = True, *, token: str | None = None,
-                  params: dict[str, str | int] | None = None) -> Any:
-        return await self._request("GET", path, authenticated=authenticated, token=token, params=params)
+                  params: dict[str, str | int] | None = None, as_tenant: bool = False) -> Any:
+        return await self._request(
+            "GET", path, authenticated=authenticated, token=token, params=params, as_tenant=as_tenant,
+        )
 
     async def post(self, path: str, body: dict[str, Any] | None = None, authenticated: bool = True,
-                   *, token: str | None = None, headers: dict[str, str] | None = None) -> Any:
+                   *, token: str | None = None, headers: dict[str, str] | None = None,
+                   as_tenant: bool = False) -> Any:
         return await self._request(
             "POST", path, body=body, authenticated=authenticated, token=token, extra_headers=headers,
+            as_tenant=as_tenant,
         )
 
     async def put(self, path: str, body: dict[str, Any] | None = None, authenticated: bool = True,
@@ -195,7 +229,7 @@ class HttpClient:
             await self._client.aclose()
 
 
-class SyncHttpClient:
+class SyncHttpClient(_RequestIdentity):
     """Synchronous REST transport with the same serialization and error rules."""
 
     def __init__(
@@ -207,11 +241,13 @@ class SyncHttpClient:
         client: httpx.Client | None = None,
         transport: httpx.BaseTransport | None = None,
         timeout: TimeoutConfig = 30.0,
+        managed_user: str | None = None,
+        client_name: str | None = None,
     ) -> None:
         if client is not None and transport is not None:
             raise ValueError("pass either client or transport, not both")
+        super().__init__(token, managed_user, client_name)
         self._api_base_url = _api_url(base_url, api_base_path)
-        self._token = token
         self._owns_client = client is None
         self._client = client or httpx.Client(
             headers={"User-Agent": _USER_AGENT, "Accept": "application/json"},
@@ -220,15 +256,6 @@ class SyncHttpClient:
             follow_redirects=False,
         )
 
-    def set_token(self, token: str | None) -> None:
-        self._token = token
-
-    def _auth_headers(self, authenticated: bool, token: str | None = None) -> dict[str, str]:
-        headers = {"Content-Type": "application/json"}
-        actual_token = self._token if token is None else token
-        if authenticated and actual_token:
-            headers["Authorization"] = f"Bearer {actual_token}"
-        return headers
 
     def _url(self, path: str) -> str:
         return f"{self._api_base_url}/{path.lstrip('/')}"
@@ -244,21 +271,17 @@ class SyncHttpClient:
         token: str | None = None,
         files: Any = None,
         extra_headers: dict[str, str] | None = None,
+        as_tenant: bool = False,
     ) -> Any:
-        actual_token = self._token if token is None else token
-        headers = self._auth_headers(authenticated, token)
-        if extra_headers:
-            headers.update(extra_headers)
+        identity = self._identity(authenticated, token, as_tenant)
+        headers = {"Content-Type": "application/json", **(extra_headers or {})}
         if files is not None:
             headers.pop("Content-Type", None)
         try:
             request = self._client.build_request(
                 method, self._url(path), json=body, params=params, headers=headers, files=files,
             )
-            if authenticated and actual_token:
-                request.headers["Authorization"] = f"Bearer {actual_token}"
-            else:
-                request.headers.pop("Authorization", None)
+            self._apply_identity(request, identity)
             response = self._client.send(request, follow_redirects=False, auth=None)
         except httpx.TimeoutException as exc:
             raise PineAIError("timeout", "Pine API request timed out") from exc
@@ -267,13 +290,17 @@ class SyncHttpClient:
         return _json_data(response)
 
     def get(self, path: str, authenticated: bool = True, *, token: str | None = None,
-            params: dict[str, str | int] | None = None) -> Any:
-        return self._request("GET", path, authenticated=authenticated, token=token, params=params)
+            params: dict[str, str | int] | None = None, as_tenant: bool = False) -> Any:
+        return self._request(
+            "GET", path, authenticated=authenticated, token=token, params=params, as_tenant=as_tenant,
+        )
 
     def post(self, path: str, body: dict[str, Any] | None = None, authenticated: bool = True,
-             *, token: str | None = None, headers: dict[str, str] | None = None) -> Any:
+             *, token: str | None = None, headers: dict[str, str] | None = None,
+             as_tenant: bool = False) -> Any:
         return self._request(
             "POST", path, body=body, authenticated=authenticated, token=token, extra_headers=headers,
+            as_tenant=as_tenant,
         )
 
     def put(self, path: str, body: dict[str, Any] | None = None, authenticated: bool = True,
