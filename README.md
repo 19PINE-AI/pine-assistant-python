@@ -153,8 +153,9 @@ Two restrictions apply. Every error below subclasses `PineAIError` and carries
 
 Billing and admission can also reject sessions and chat for a managed user:
 402 `platform_spend_limit_reached`, 403 `platform_access_suspended` or
-`platform_managed_user_unavailable`, 409 `platform_session_state_conflict`, and
-429 when the tenant quota is exhausted.
+`platform_managed_user_unavailable`, 409 `platform_session_state_conflict`, 409
+`platform_session_limit_reached` from `sessions.start` when the running-task
+limit is reached, and 429 when the tenant quota is exhausted.
 
 ```python
 async with AsyncPineAI(
