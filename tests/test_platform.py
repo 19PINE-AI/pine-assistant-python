@@ -9,7 +9,17 @@ import pytest
 import socketio
 from aiohttp import web
 
-from pine_assistant import AsyncPineAI, ManagedUser, PineAI, PineAIError, PlatformError
+from pine_assistant import (
+    API_KEY_PREFIXES,
+    MANAGED_USER_HEADER,
+    AsyncPineAI,
+    ManagedUser,
+    PineAI,
+    PineAIError,
+    PlatformError,
+    SessionError,
+    validate_external_id,
+)
 
 API_KEY = "pine_sk_test_c2VjcmV0LWtleS1mb3ItdGVzdHM"
 EXTERNAL_ID = "acme:user|42-x"
@@ -33,6 +43,9 @@ def managed_user(**overrides):
     }
 
 
+STORED_USER = managed_user(email="stored@example.com", name="Stored Name", phone="+14155550199")
+
+
 @dataclass
 class FakeBackend:
     base_url: str = ""
@@ -41,6 +54,7 @@ class FakeBackend:
     handshake_clients: list[str | None] = field(default_factory=list)
     envelopes: list[dict[str, Any]] = field(default_factory=list)
     error_status: int | None = None
+    error_code: str = "platform_failure"
     existing: bool = False
 
     def app(self) -> web.Application:
@@ -77,16 +91,19 @@ class FakeBackend:
             if self.error_status is not None:
                 # A hostile body: none of it may surface through the SDK.
                 return web.json_response(
-                    {"status": "error", "error": {"code": "platform_failure", "message": f"{API_KEY} {EXTERNAL_ID}"}},
+                    {"status": "error", "error": {"code": self.error_code, "message": f"{API_KEY} {EXTERNAL_ID}"}},
                     status=self.error_status,
                 )
             return None
 
         async def create_user(request):
-            return await record(request) or web.json_response(
-                success(managed_user(**self.requests[-1]["body"] | {"id": PINE_USER_ID})),
-                status=200 if self.existing else 201,
-            )
+            failure = await record(request)
+            if failure:
+                return failure
+            if self.existing:
+                # The stored user is returned unchanged, whatever the request carried.
+                return web.json_response(success(STORED_USER), status=200)
+            return web.json_response(success(managed_user(**self.requests[-1]["body"])), status=201)
 
         async def get_user(request):
             return await record(request) or web.json_response(success(managed_user()))
@@ -103,6 +120,7 @@ class FakeBackend:
         app.router.add_get("/api/platform/v1/managed-users/{external_id}", get_user)
         app.router.add_get("/api/v2/auth/me", auth_me)
         app.router.add_get("/api/v2/sessions", sessions)
+        app.router.add_post("/api/v2/sessions", sessions)
         return app
 
 
@@ -113,8 +131,8 @@ async def backend():
     await runner.setup()
     site = web.TCPSite(runner, "127.0.0.1", 0)
     await site.start()
-    port = site._server.sockets[0].getsockname()[1]
-    fake.base_url = f"http://127.0.0.1:{port}"
+    host, port = runner.addresses[0][:2]
+    fake.base_url = f"http://{host}:{port}"
     try:
         yield fake
     finally:
@@ -186,7 +204,10 @@ async def test_create_managed_user_is_typed_and_acts_as_the_tenant(backend, exis
     assert isinstance(user, ManagedUser)
     assert user.id == PINE_USER_ID
     assert user.external_id == EXTERNAL_ID
-    assert user.phone == phone
+    if existing:
+        assert user == ManagedUser.model_validate(STORED_USER)
+    else:
+        assert (user.email, user.name, user.phone) == ("ada@example.com", "Ada Lovelace", phone)
     [request] = backend.requests
     assert request["method"] == "POST"
     assert request["path"] == "/api/platform/v1/managed-users"
@@ -240,6 +261,8 @@ async def test_managed_user_resolution_failure_is_typed_and_does_not_connect(bac
         {"api_key": API_KEY, "managed_user": EXTERNAL_ID, "user_id": "17"},
         {"managed_user": EXTERNAL_ID},
         {"api_key": "not-a-pine-key", "managed_user": EXTERNAL_ID},
+        {"api_key": "pine_sk_prod_c2VjcmV0", "managed_user": EXTERNAL_ID},
+        {"api_key": "pine_sk_c2VjcmV0"},
         {"api_key": API_KEY, "managed_user": ".leading-dot"},
         {"api_key": API_KEY, "managed_user": "x" * 129},
         {"api_key": API_KEY, "managed_user": "has space"},
@@ -316,3 +339,50 @@ def test_sync_client_supports_platform_and_managed_user_requests():
     assert seen[1].headers["Pine-Managed-User"] == EXTERNAL_ID
     assert all(request.headers["Authorization"] == f"Bearer {API_KEY}" for request in seen)
     assert all(request.headers["Pine-Client"] == "mcp" for request in seen)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("status", "code"), [(403, "platform_route_not_allowed"), (429, "rate_limited")])
+async def test_user_scoped_failures_keep_code_and_status_without_upstream_body(backend, status, code):
+    backend.error_status, backend.error_code = status, code
+    async with AsyncPineAI(api_key=API_KEY, managed_user=EXTERNAL_ID, base_url=backend.base_url) as client:
+        with pytest.raises(SessionError) as excinfo:
+            await client.sessions.list()
+    assert (excinfo.value.code, excinfo.value.status_code) == (code, status)
+    _assert_no_secrets(str(excinfo.value))
+
+
+@pytest.mark.asyncio
+async def test_managed_user_is_never_sent_with_a_token_other_than_the_key(backend):
+    async with AsyncPineAI(api_key=API_KEY, managed_user=EXTERNAL_ID, base_url=backend.base_url) as client:
+        client.http.set_token("user-jwt")
+        await client.sessions.list()
+        await client.http.get("/v2/sessions", token=API_KEY)
+        await client.http.get("/v2/sessions", token="other-jwt")
+
+    first, second, third = (request["headers"] for request in backend.requests)
+    assert first["Authorization"] == "Bearer user-jwt" and MANAGED_USER_HEADER not in first
+    assert second["Authorization"] == f"Bearer {API_KEY}" and second[MANAGED_USER_HEADER] == EXTERNAL_ID
+    assert third["Authorization"] == "Bearer other-jwt" and MANAGED_USER_HEADER not in third
+
+
+@pytest.mark.asyncio
+async def test_caller_headers_cannot_override_identity(backend):
+    forged = {"Authorization": "Bearer forged", MANAGED_USER_HEADER: "someone-else", "Pine-Client": "forged"}
+    async with AsyncPineAI(api_key=API_KEY, managed_user=EXTERNAL_ID, base_url=backend.base_url) as client:
+        await client.http.post("/v2/sessions", {}, headers=forged)
+    async with AsyncPineAI(access_token="user-token", base_url=backend.base_url) as client:
+        await client.http.post("/v2/sessions", {}, headers=forged)
+
+    managed, user = (request["headers"] for request in backend.requests)
+    assert managed["Authorization"] == f"Bearer {API_KEY}"
+    assert managed[MANAGED_USER_HEADER] == EXTERNAL_ID
+    assert "Pine-Client" not in managed
+    assert user["Authorization"] == "Bearer user-token"
+    assert MANAGED_USER_HEADER not in user and "Pine-Client" not in user
+
+
+def test_public_platform_names():
+    assert API_KEY_PREFIXES == ("pine_sk_live_", "pine_sk_test_")
+    assert MANAGED_USER_HEADER == "Pine-Managed-User"
+    assert validate_external_id(EXTERNAL_ID) == EXTERNAL_ID

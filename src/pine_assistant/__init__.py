@@ -29,8 +29,16 @@ from pine_assistant.models.session import (
     SessionOutcomeRating,
     SessionOutcomesPage,
 )
-from pine_assistant.platform_api import ManagedUsersAPI, PlatformAPI, SyncManagedUsersAPI, SyncPlatformAPI
+from pine_assistant.platform_api import (
+    API_KEY_PREFIXES,
+    ManagedUsersAPI,
+    PlatformAPI,
+    SyncManagedUsersAPI,
+    SyncPlatformAPI,
+    validate_external_id,
+)
 from pine_assistant.sessions import SessionsAPI, SyncSessionsAPI
+from pine_assistant.transport.http import CLIENT_HEADER, MANAGED_USER_HEADER
 
 __version__ = "0.5.0rc1"
 __all__ = [
@@ -45,6 +53,10 @@ __all__ = [
     "ManagedUsersAPI",
     "SyncManagedUsersAPI",
     "ManagedUser",
+    "API_KEY_PREFIXES",
+    "MANAGED_USER_HEADER",
+    "CLIENT_HEADER",
+    "validate_external_id",
     "AuthIdentity",
     "AuthTicket",
     "RedeemedTicket",

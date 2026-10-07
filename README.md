@@ -129,7 +129,10 @@ api_key = os.environ["PINE_API_KEY"]
 
 async with AsyncPineAI(api_key=api_key) as tenant:
     user = await tenant.platform.managed_users.create(
-        "usr_01J9Z3K8QF", email="ada@example.com", name="Ada Lovelace", phone="+14155550100",
+        "usr_01J9Z3K8QF",
+        email="ada@example.com",
+        name="Ada Lovelace",
+        phone="+14155550100",
     )
     same_user = await tenant.platform.managed_users.get("usr_01J9Z3K8QF")
 ```
@@ -140,22 +143,26 @@ both; `connect()` looks up the user's Pine user ID once through `auth.me()`.
 The rest of the SDK works unchanged.
 
 ```python
-async with AsyncPineAI(api_key=api_key, managed_user="usr_01J9Z3K8QF") as client:
+async with AsyncPineAI(
+    api_key=api_key, managed_user="usr_01J9Z3K8QF",
+) as client:
     session = await client.sessions.create()
     await client.connect()
     await client.join_session(session["id"])
-    async for event in client.chat(session["id"], "Call my dentist to move Tuesday's appointment"):
+    message = "Call my dentist to move Tuesday's appointment"
+    async for event in client.chat(session["id"], message):
         print(event.type, event.data)
 ```
 
 `PineAI` accepts the same `api_key` and `managed_user` for synchronous REST.
 `client_name="..."` sends a `Pine-Client` header on REST requests and on the
-Socket.IO handshake. The backend records it as the source only for requests
-made with a tenant key, and only the value `mcp`; it changes no behavior. Platform API failures raise `PlatformError` with a stable
-`code` and `status_code` (for example 401 for a bad key, 403 for a suspended
-integration, 404 `platform_managed_user_not_found`, 409
-`platform_managed_user_limit_reached`); like every SDK error, it never
-reproduces the upstream body, the key or the `external_id`.
+Socket.IO handshake. The backend records it as the source only for requests made
+with a tenant key, and only the value `mcp`; it changes no behavior. Platform
+API failures raise `PlatformError` with a stable `code` and `status_code` (for
+example 401 for a bad key, 403 for a suspended integration, 404
+`platform_managed_user_not_found`, 409 `platform_managed_user_limit_reached`);
+like every SDK error, it never reproduces the upstream body, the key or the
+`external_id`.
 
 ## Quick Start (Sync REST)
 

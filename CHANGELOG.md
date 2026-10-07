@@ -20,6 +20,10 @@ project adheres to [Semantic Versioning](https://semver.org/).
   `auth.me()`. Injected HTTP clients cannot add or override that header.
 - `client_name` adds a `Pine-Client` header to every REST request and to the
   Socket.IO handshake.
+- `API_KEY_PREFIXES` (`pine_sk_live_`, `pine_sk_test_`), `validate_external_id`,
+  `MANAGED_USER_HEADER` and `CLIENT_HEADER` are public. The managed user is
+  sent only with the API key it was configured with, and identity headers are
+  applied after caller headers, so neither can be overridden per request.
 
 ## [0.5.0rc1] - 2026-09-18
 

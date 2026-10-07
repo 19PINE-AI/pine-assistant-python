@@ -17,7 +17,7 @@ from pine_assistant.errors import PineAIError, PlatformError
 from pine_assistant.models.platform import ManagedUser
 from pine_assistant.transport.http import HttpClient, SyncHttpClient
 
-API_KEY_PREFIX = "pine_sk_"
+API_KEY_PREFIXES = ("pine_sk_live_", "pine_sk_test_")
 _EXTERNAL_ID = re.compile(r"[A-Za-z0-9_:|-][A-Za-z0-9._:|-]{0,127}")
 _MANAGED_USERS = "/platform/v1/managed-users"
 

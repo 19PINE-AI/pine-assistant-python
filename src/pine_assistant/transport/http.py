@@ -13,6 +13,7 @@ DEFAULT_API_BASE_PATH = "/api"
 _USER_AGENT = "pine-assistant-sdk"
 MANAGED_USER_HEADER = "Pine-Managed-User"
 CLIENT_HEADER = "Pine-Client"
+_IDENTITY_HEADERS = ("Authorization", MANAGED_USER_HEADER, CLIENT_HEADER)
 
 # Public HTTPX timeout inputs accepted by both sync and async clients.  HTTPX's
 # internal ``TimeoutTypes`` alias is not exported in every supported release.
@@ -95,36 +96,38 @@ class _RequestIdentity:
     def __init__(self, token: str | None, managed_user: str | None, client_name: str | None) -> None:
         self._token = token
         self._managed_user = managed_user
+        # A managed user is bound to the API key it was configured with and is
+        # never asserted with any other token, e.g. one installed by set_token().
+        self._managed_user_key = token if managed_user else None
         self._client_name = client_name
 
     def set_token(self, token: str | None) -> None:
         self._token = token
 
-    def _auth_headers(self, authenticated: bool, token: str | None = None, as_tenant: bool = False) -> dict[str, str]:
-        """Headers naming who a request acts as.
-
-        The managed user belongs to the client's own API key, so it is sent only
-        with that key, never with a per-request ``token`` override, and never on
-        Platform API requests the tenant makes as itself (``as_tenant``).
-        """
-        headers: dict[str, str] = {"Content-Type": "application/json"}
+    def _identity(self, authenticated: bool, token: str | None, as_tenant: bool) -> dict[str, str]:
+        """The identity headers a request carries; Platform requests the tenant makes as itself omit the user."""
+        identity: dict[str, str] = {}
         actual_token = self._token if token is None else token
         if authenticated and actual_token:
-            headers["Authorization"] = f"Bearer {actual_token}"
-            if token is None and self._managed_user and not as_tenant:
-                headers[MANAGED_USER_HEADER] = self._managed_user
+            identity["Authorization"] = f"Bearer {actual_token}"
+            if self._managed_user and actual_token == self._managed_user_key and not as_tenant:
+                identity[MANAGED_USER_HEADER] = self._managed_user
         if self._client_name:
-            headers[CLIENT_HEADER] = self._client_name
-        return headers
+            identity[CLIENT_HEADER] = self._client_name
+        return identity
 
+    @staticmethod
+    def _apply_identity(request: httpx.Request, identity: dict[str, str]) -> None:
+        """Make the identity headers exactly the computed ones.
 
-def _enforce_identity(request: httpx.Request, headers: dict[str, str]) -> None:
-    """Make the identity headers exactly the computed ones, whatever an injected client defaults."""
-    for name in ("Authorization", MANAGED_USER_HEADER):
-        if name in headers:
-            request.headers[name] = headers[name]
-        else:
-            request.headers.pop(name, None)
+        Applied last, so neither an injected client's defaults nor caller
+        headers can authenticate a request or choose who it acts as.
+        """
+        for name in _IDENTITY_HEADERS:
+            if name in identity:
+                request.headers[name] = identity[name]
+            else:
+                request.headers.pop(name, None)
 
 
 class HttpClient(_RequestIdentity):
@@ -173,9 +176,8 @@ class HttpClient(_RequestIdentity):
         extra_headers: dict[str, str] | None = None,
         as_tenant: bool = False,
     ) -> Any:
-        headers = self._auth_headers(authenticated, token, as_tenant)
-        if extra_headers:
-            headers.update(extra_headers)
+        identity = self._identity(authenticated, token, as_tenant)
+        headers = {"Content-Type": "application/json", **(extra_headers or {})}
         if files is not None:
             # httpx must generate the multipart boundary itself.
             headers.pop("Content-Type", None)
@@ -183,9 +185,7 @@ class HttpClient(_RequestIdentity):
             request = self._client.build_request(
                 method, self._url(path), json=body, params=params, headers=headers, files=files,
             )
-            # An injected client may carry default authentication. Never let it
-            # authenticate an anonymous request or act for another user.
-            _enforce_identity(request, headers)
+            self._apply_identity(request, identity)
             response = await self._client.send(request, follow_redirects=False, auth=None)
         except httpx.TimeoutException as exc:
             raise PineAIError("timeout", "Pine API request timed out") from exc
@@ -273,16 +273,15 @@ class SyncHttpClient(_RequestIdentity):
         extra_headers: dict[str, str] | None = None,
         as_tenant: bool = False,
     ) -> Any:
-        headers = self._auth_headers(authenticated, token, as_tenant)
-        if extra_headers:
-            headers.update(extra_headers)
+        identity = self._identity(authenticated, token, as_tenant)
+        headers = {"Content-Type": "application/json", **(extra_headers or {})}
         if files is not None:
             headers.pop("Content-Type", None)
         try:
             request = self._client.build_request(
                 method, self._url(path), json=body, params=params, headers=headers, files=files,
             )
-            _enforce_identity(request, headers)
+            self._apply_identity(request, identity)
             response = self._client.send(request, follow_redirects=False, auth=None)
         except httpx.TimeoutException as exc:
             raise PineAIError("timeout", "Pine API request timed out") from exc

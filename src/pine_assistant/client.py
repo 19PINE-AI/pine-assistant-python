@@ -18,7 +18,7 @@ from pine_assistant.chat import ChatEngine, ChatEvent, Deduplicator, event_from_
 from pine_assistant.errors import ConnectionError
 from pine_assistant.models.events import C2SEvent
 from pine_assistant.models.form import FormSubmissionResult, FormToUserData, encode_form_answers
-from pine_assistant.platform_api import API_KEY_PREFIX, PlatformAPI, SyncPlatformAPI, validate_external_id
+from pine_assistant.platform_api import API_KEY_PREFIXES, PlatformAPI, SyncPlatformAPI, validate_external_id
 from pine_assistant.sessions import SessionsAPI, SyncSessionsAPI
 from pine_assistant.transport.http import DEFAULT_API_BASE_PATH, DEFAULT_BASE_URL, HttpClient, SyncHttpClient
 from pine_assistant.transport.socketio import SocketIOManager
@@ -55,8 +55,8 @@ def _platform_identity(
         return access_token
     if access_token is not None or user_id is not None:
         raise ValueError("api_key cannot be combined with access_token or user_id")
-    if not isinstance(api_key, str) or not api_key.startswith(API_KEY_PREFIX):
-        raise ValueError(f"api_key must be a Pine Platform secret key starting with {API_KEY_PREFIX}")
+    if not isinstance(api_key, str) or not api_key.startswith(API_KEY_PREFIXES):
+        raise ValueError("api_key must be a Pine Platform secret key starting with pine_sk_live_ or pine_sk_test_")
     if managed_user is not None:
         validate_external_id(managed_user, "managed_user")
     return api_key
