@@ -13,6 +13,7 @@ from pine_assistant import (
     API_KEY_PREFIXES,
     MANAGED_USER_HEADER,
     AsyncPineAI,
+    AuthError,
     ManagedUser,
     PineAI,
     PineAIError,
@@ -121,6 +122,7 @@ class FakeBackend:
         app.router.add_get("/api/v2/auth/me", auth_me)
         app.router.add_get("/api/v2/sessions", sessions)
         app.router.add_post("/api/v2/sessions", sessions)
+        app.router.add_post("/api/v2/auth/tickets", sessions)
         return app
 
 
@@ -386,3 +388,28 @@ def test_public_platform_names():
     assert API_KEY_PREFIXES == ("pine_sk_live_", "pine_sk_test_")
     assert MANAGED_USER_HEADER == "Pine-Managed-User"
     assert validate_external_id(EXTERNAL_ID) == EXTERNAL_ID
+
+
+AUTH_ATTEMPT_ID = "a" * 22
+CODE_CHALLENGE = "c" * 43
+
+
+@pytest.mark.asyncio
+async def test_documented_managed_user_restrictions_raise_the_resource_error_type(backend):
+    async with AsyncPineAI(api_key=API_KEY, managed_user=EXTERNAL_ID, base_url=backend.base_url) as client:
+        backend.error_status, backend.error_code = 403, "platform_route_not_allowed"
+        with pytest.raises(AuthError) as minted:
+            await client.auth.mint_ticket(
+                purpose="mcp", client_id="client", auth_attempt_id=AUTH_ATTEMPT_ID, code_challenge=CODE_CHALLENGE,
+            )
+        backend.error_code = "platform_managed_user_access_disabled"
+        with pytest.raises(SessionError) as listed:
+            await client.sessions.list()
+        with pytest.raises(AuthError) as connected:
+            await client.connect()
+
+    assert (minted.value.code, minted.value.status_code) == ("platform_route_not_allowed", 403)
+    for excinfo in (listed, connected):
+        assert (excinfo.value.code, excinfo.value.status_code) == ("platform_managed_user_access_disabled", 403)
+        _assert_no_secrets(str(excinfo.value))
+    assert backend.handshakes == []

@@ -140,7 +140,16 @@ async with AsyncPineAI(api_key=api_key) as tenant:
 Then act as that user with `managed_user`. Every user-scoped REST request sends
 the key plus a `Pine-Managed-User` header, and the Socket.IO handshake sends
 both; `connect()` looks up the user's Pine user ID once through `auth.me()`.
-The rest of the SDK works unchanged.
+Two cases differ from a user-token client. Every error below subclasses
+`PineAIError` and carries `code` and `status_code`:
+
+- `client.auth.mint_ticket()` always fails with 403
+  `platform_route_not_allowed`, raised as `AuthError`. Managed users cannot mint
+  login tickets.
+- While the backend's managed-user access switch is off, every user-scoped call
+  fails with 403 `platform_managed_user_access_disabled`. The exception type is
+  the resource's usual one: `SessionError` from `sessions.*`, `AuthError` from
+  `auth.*` and from `connect()`, which reads `auth.me()` first.
 
 ```python
 async with AsyncPineAI(
