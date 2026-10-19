@@ -37,6 +37,13 @@ class SessionError(PineAIError):
         super().__init__(code, message, details, status_code=status_code)
 
 
+class PlatformError(PineAIError):
+    """A Platform API failure: stable ``code`` and ``status_code``, never the upstream body."""
+
+    def __init__(self, message: str, code: str = "platform_error", *, status_code: int | None = None):
+        super().__init__(code, message, status_code=status_code)
+
+
 class ConnectionError(PineAIError):
     def __init__(self, message: str):
         super().__init__("connection_error", message)

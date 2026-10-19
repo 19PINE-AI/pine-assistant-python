@@ -5,6 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0rc2] - 2026-10-19
+
+Internal release candidate for 0.5.0.
+
+### Added
+
+- Pine Platform API support for partners (businesses that build on Pine).
+  `AsyncPineAI` and `PineAI` accept a partner's secret key as `api_key`.
+  `client.platform.managed_users.create()` and `.get()` take your `external_id`,
+  return typed `ManagedUser` values, and raise `PlatformError` without upstream
+  bodies.
+- Managed-user mode: `api_key` plus `user_id`, where `user_id` is the
+  `ManagedUser.id` (the Pine user ID). REST requests send the key and a
+  `Pine-Managed-User-Id` header. The Socket.IO handshake sends
+  `{"token", "managed_user_id"}`, and envelopes carry the same ID as
+  `user_id`. `connect()` sends no REST request first. Injected HTTP clients
+  cannot add or override the header.
+- In key mode, `user_id` must be a string in canonical decimal form: 1 to
+  9223372036854775807, with no sign, spaces or leading zeros. An `int` is
+  refused. `validate_user_id` exposes this check.
+- A client with `api_key` and no `user_id` can call only the Platform API. A
+  user-scoped call from it raises `ValueError` before any request is sent.
+  These also raise `ValueError`: `api_key` with `access_token`, identity
+  overrides passed to `connect()` in key mode, `platform.*` on a client without
+  `api_key`, and `auth.verify_code()` or `set_token()` on a client with
+  `api_key` (checked before the code is sent). A Platform key passed as
+  `access_token` raises `ValueError` that says to pass it as `api_key`.
+- `API_KEY_PREFIXES` (`pine_sk_live_`, `pine_sk_test_`), `validate_external_id`,
+  `validate_user_id` and `MANAGED_USER_HEADER` are public. The
+  managed-user header is sent only with the API key it was configured with, and
+  identity headers are applied after caller headers, so neither can be
+  overridden per request. Error messages never contain the key, the
+  `external_id` or the user ID.
+- `sessions.history()` on the async and sync clients reads one page of a
+  session's stored messages over REST (`GET /v2/sessions/{id}/messages`), so
+  a client without Socket.IO can read the agent's replies. It returns
+  `SessionHistoryPage` and raises `SessionError`.
+- Docs for managed users: `docs/sdk-api.md` (SDK methods), `docs/http-api.md`
+  (raw HTTP API) and `docs/socketio.md` (Socket.IO, reference only).
+- In key mode, a `connect()` that gets no `ready` event within `ready_timeout`
+  raises `ConnectionError` with the hint to check `api_key` and `user_id`. The
+  Pine backend refuses a bad handshake by closing the connection, with no
+  `connect_error`.
+
 ## [0.5.0rc1] - 2026-09-18
 
 Internal release candidate for 0.5.0. See [MIGRATION.md](MIGRATION.md) before

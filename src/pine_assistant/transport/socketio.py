@@ -1,7 +1,8 @@
 """
 Socket.IO connection manager — spec sections 3.1, 5.1.2.
 
-Connection: wss://{baseUrl}/api/v2/socket.io/ with auth={token}.
+Connection: wss://{baseUrl}/api/v2/socket.io/ with auth={token}, plus
+managed_user_id when a Platform API key acts for a managed user.
 Waits for `ready` event before resolving connect().
 """
 
@@ -41,9 +42,11 @@ class SocketIOManager:
         device_id: str | None = None,
         transports: list[str] | None = None,
         ready_timeout: float = 15.0,
+        managed_user_id: str | None = None,
     ):
         self._base_url = base_url
         self._token = token
+        self._managed_user_id = managed_user_id
         self._user_id = user_id
         self._device_id = device_id or str(uuid.uuid4())
         self._transports = transports or ["websocket"]
@@ -144,7 +147,7 @@ class SocketIOManager:
         try:
             await self._sio.connect(
                 self._base_url,
-                auth={"token": self._token},
+                auth=self._handshake_auth(),
                 transports=self._transports,
                 socketio_path=SOCKETIO_PATH,
                 wait_timeout=self._ready_timeout,
@@ -174,11 +177,14 @@ class SocketIOManager:
             self._connected = False
             self._disconnect_event.set()
             # The Pine backend accepts the WebSocket but only emits 'ready' after
-            # its own auth check. A timeout here almost always means the token or
-            # user_id is rejected — surface that hint instead of a generic timeout.
+            # its own auth check. A timeout here almost always means the
+            # credentials are rejected — surface that hint instead of a generic timeout.
+            if self._managed_user_id:
+                hint = "Check api_key and user_id."
+            else:
+                hint = "This usually means access_token or user_id is invalid/expired — re-run the auth flow."
             raise PineConnectionError(
-                f"Socket.IO connected but no 'ready' event after {self._ready_timeout}s. "
-                "This usually means access_token or user_id is invalid/expired — re-run the auth flow."
+                f"Socket.IO connected but no 'ready' event after {self._ready_timeout}s. {hint}"
             ) from None
         self._connection_generation += 1
         # An earlier connection may still be unwinding after its disconnect.
@@ -189,6 +195,12 @@ class SocketIOManager:
             for key, generation in self._form_submission_attempts.items()
             if key in self._form_submission_pending_keys
         }
+
+    def _handshake_auth(self) -> dict[str, str]:
+        auth = {"token": self._token}
+        if self._managed_user_id:
+            auth["managed_user_id"] = self._managed_user_id
+        return auth
 
     def _track_membership(self, event_type: str, session_id: str | None) -> None:
         """Remember which sessions to re-join after a reconnect.

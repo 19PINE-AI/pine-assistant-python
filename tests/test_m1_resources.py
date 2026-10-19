@@ -450,6 +450,83 @@ def test_session_message_and_outcomes_validate_session_ids(session_id):
         client.close()
 
 
+def history_page(next_message_id=""):
+    return success({
+        "messages": [
+            {"message_id": "19", "type": "session:text", "version": 2, "data": '{"content":"Booked"}',
+             "created_at": "2026-10-19T01:02:03Z", "extra": "kept"},
+            {"message_id": "18", "type": "session:message", "version": 2, "data": '{"content":"Book it"}',
+             "created_at": None},
+        ],
+        "next_message_id": next_message_id,
+    })
+
+
+@pytest.mark.asyncio
+async def test_async_session_history_reads_one_page_and_its_cursor():
+    async def handler(request):
+        assert request.method == "GET"
+        assert request.url.path == "/api/v2/sessions/7/messages"
+        assert dict(request.url.params) == {"limit": "2", "before_message_id": "20"}
+        return httpx.Response(200, json=history_page("18"))
+
+    async with AsyncPineAI(base_url="https://pine.test", http_transport=httpx.MockTransport(handler)) as client:
+        page = await client.sessions.history("7", limit=2, before_message_id=20)
+
+    newest, older = page.messages
+    assert page.next_message_id == "18"
+    assert (newest.message_id, newest.type, newest.version) == ("19", "session:text", 2)
+    assert json.loads(newest.data) == {"content": "Booked"}
+    assert newest.model_extra == {"extra": "kept"}
+    assert older.created_at is None
+
+
+def test_sync_session_history_defaults_and_empty_cursor_ends_paging():
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json=history_page(""))
+
+    with PineAI(access_token="user", base_url="https://pine.test", http_transport=httpx.MockTransport(handler)) as client:
+        page = client.sessions.history("7")
+
+    assert page.next_message_id is None
+    assert [message.message_id for message in page.messages] == ["19", "18"]
+    assert dict(requests[0].url.params) == {"limit": "30"}
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"session_id": 0}, {"session_id": "bad"}, {"session_id": True},
+        {"limit": 0}, {"limit": 101}, {"limit": True},
+        {"before_message_id": "x"}, {"before_message_id": True},
+    ],
+)
+def test_session_history_validates_input_before_any_request(kwargs):
+    requests = []
+    arguments = {"session_id": "7", **kwargs}
+    with PineAI(
+        base_url="https://pine.test", http_transport=httpx.MockTransport(lambda request: requests.append(request)),
+    ) as client, pytest.raises(ValueError):
+        client.sessions.history(arguments.pop("session_id"), **arguments)
+    assert requests == []
+
+
+@pytest.mark.asyncio
+async def test_session_history_failures_raise_session_error_without_upstream_body():
+    async def handler(_request):
+        return httpx.Response(404, json={"status": "error", "error": {"code": "session_not_found", "message": "secret"}})
+
+    async with AsyncPineAI(base_url="https://pine.test", http_transport=httpx.MockTransport(handler)) as client:
+        with pytest.raises(SessionError) as excinfo:
+            await client.sessions.history("7")
+
+    assert (excinfo.value.code, excinfo.value.status_code) == ("session_not_found", 404)
+    assert "secret" not in str(excinfo.value)
+
+
 @pytest.mark.asyncio
 async def test_upload_uses_multipart_content_type(tmp_path):
     attachment = tmp_path / "note.txt"

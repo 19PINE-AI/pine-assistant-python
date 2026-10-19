@@ -109,3 +109,35 @@ class SessionOutcomesPage(BaseModel):
         if value is None:
             return None
         return SessionInfo.normalize_id(value)
+
+
+class SessionHistoryMessage(BaseModel):
+    """One stored message; ``data`` is the stored protocol JSON as a string."""
+
+    model_config = ConfigDict(extra="allow")
+
+    message_id: str
+    type: str
+    version: int = 0
+    data: str = ""
+    created_at: str | None = None
+
+    @field_validator("message_id", mode="before")
+    @classmethod
+    def normalize_id(cls, value: Any) -> str:
+        return SessionInfo.normalize_id(value)
+
+
+class SessionHistoryPage(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    messages: list[SessionHistoryMessage]
+    next_message_id: str | None = None
+
+    @field_validator("next_message_id", mode="before")
+    @classmethod
+    def normalize_cursor(cls, value: Any) -> str | None:
+        if value is None or value == "":
+            return None
+        else:
+            return SessionInfo.normalize_id(value)

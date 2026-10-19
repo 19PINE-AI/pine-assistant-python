@@ -12,7 +12,7 @@ them. `is_supported_event` tells the two apart.
 from pine_assistant.auth import Auth, SyncAuth
 from pine_assistant.chat import ChatEvent
 from pine_assistant.client import AsyncPineAI, PineAI
-from pine_assistant.errors import AuthError, ConnectionError, PineAIError, SessionError
+from pine_assistant.errors import AuthError, ConnectionError, PineAIError, PlatformError, SessionError
 from pine_assistant.models.auth import AuthIdentity, AuthTicket, RedeemedTicket
 from pine_assistant.models.events import (
     SUPPORTED_EVENTS,
@@ -20,7 +20,10 @@ from pine_assistant.models.events import (
     S2CEvent,
     is_supported_event,
 )
+from pine_assistant.models.platform import ManagedUser
 from pine_assistant.models.session import (
+    SessionHistoryMessage,
+    SessionHistoryPage,
     SessionInfo,
     SessionListResponse,
     SessionMessageStatus,
@@ -28,9 +31,18 @@ from pine_assistant.models.session import (
     SessionOutcomeRating,
     SessionOutcomesPage,
 )
+from pine_assistant.platform_api import (
+    ManagedUsersAPI,
+    PlatformAPI,
+    SyncManagedUsersAPI,
+    SyncPlatformAPI,
+    validate_external_id,
+    validate_user_id,
+)
 from pine_assistant.sessions import SessionsAPI, SyncSessionsAPI
+from pine_assistant.transport.http import API_KEY_PREFIXES, MANAGED_USER_HEADER
 
-__version__ = "0.5.0rc1"
+__version__ = "0.5.0rc2"
 __all__ = [
     "PineAI",
     "AsyncPineAI",
@@ -38,10 +50,21 @@ __all__ = [
     "SyncAuth",
     "SessionsAPI",
     "SyncSessionsAPI",
+    "PlatformAPI",
+    "SyncPlatformAPI",
+    "ManagedUsersAPI",
+    "SyncManagedUsersAPI",
+    "ManagedUser",
+    "API_KEY_PREFIXES",
+    "MANAGED_USER_HEADER",
+    "validate_external_id",
+    "validate_user_id",
     "AuthIdentity",
     "AuthTicket",
     "RedeemedTicket",
     "SessionInfo",
+    "SessionHistoryMessage",
+    "SessionHistoryPage",
     "SessionListResponse",
     "SessionMessageStatus",
     "SessionOutcome",
@@ -51,6 +74,7 @@ __all__ = [
     "PineAIError",
     "AuthError",
     "SessionError",
+    "PlatformError",
     "ConnectionError",
     "C2SEvent",
     "S2CEvent",
