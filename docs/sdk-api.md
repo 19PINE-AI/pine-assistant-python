@@ -82,6 +82,8 @@ with `sessions.history()`. Each message has `message_id`, `type`, `version`,
 `data` (a JSON string) and `created_at`. To read older messages, pass
 `next_message_id` as `before_message_id`. When `next_message_id` is `None`,
 there are no older messages.
+A new reply can take a few seconds to appear in this list. If the `state`
+changed but the reply is missing, read again.
 
 ### Real time (`AsyncPineAI` only)
 
@@ -99,6 +101,29 @@ questions and each change of `state` as they happen.
 | `submit_form_response(session_id, message_id, answers)` | Replies to an agent form. |
 | `leave_session(session_id)` | Leaves a session. |
 | `disconnect()` / `aclose()` | Closes Socket.IO / closes everything. |
+
+### Answer a form
+
+When the agent needs information, it sends a `session:form_to_user` form. Read
+its fields, then pass one answer per field `name` to `submit_form_response()`.
+
+- **Live:** the form arrives as an event from `chat()`, `listen()` or
+  `subscribe()`. Use `event.message_id`, and read the fields from `event.data`.
+- **Later**, for example after a reconnect: find the newest
+  `session:form_to_user` message from the agent in `rebuild()` or
+  `sessions.history()`. For `sessions.history()`, read `data` with
+  `json.loads()`.
+
+Answer only a form whose `form.is_submitted` is `false`.
+
+```python
+from pine_assistant.models import FormToUserData
+
+if event.type == "session:form_to_user":
+    form = FormToUserData.model_validate(event.data).form
+    answers = {field.name: ... for field in form.fields}
+    await client.submit_form_response(session_id, event.message_id, answers)
+```
 
 ### Errors
 

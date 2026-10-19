@@ -116,6 +116,8 @@ Routes that make the agent work can also return these errors:
 `type`, `version`, `data` (a JSON string) and `created_at`. To read older
 messages, send the returned `next_message_id` as `before_message_id`. An empty
 `next_message_id` means there are no older messages.
+A new reply can take a few seconds to appear in this list. If the `state`
+changed but the reply is missing, read again.
 
 Other `/v2` routes accept the key and header in the same way. This page does
 not describe them.
