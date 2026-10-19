@@ -124,9 +124,8 @@ class AsyncPineAI:
         http_transport: httpx.AsyncBaseTransport | None = None,
         api_key: str | None = None,
     ):
-        access_token = _platform_identity(access_token, user_id, api_key)
         self._base_url = base_url
-        self._access_token = access_token
+        self._access_token = _platform_identity(access_token, user_id, api_key)
         self._user_id = user_id
         self._managed_user_id = user_id if api_key is not None else None
         self._key_mode = api_key is not None
@@ -140,6 +139,7 @@ class AsyncPineAI:
             api_base_path=api_base_path,
             client=http_client,
             transport=http_transport,
+            api_key=api_key,
             managed_user_id=self._managed_user_id,
         )
         self.auth = Auth(self.http)
@@ -504,12 +504,14 @@ class PineAI:
         api_key: str | None = None,
         user_id: str | None = None,
     ) -> None:
+        _platform_identity(access_token, user_id, api_key)
         self.http = SyncHttpClient(
             base_url=base_url,
-            token=_platform_identity(access_token, user_id, api_key),
+            token=access_token,
             api_base_path=api_base_path,
             client=http_client,
             transport=http_transport,
+            api_key=api_key,
             managed_user_id=user_id if api_key is not None else None,
         )
         self.auth = SyncAuth(self.http)

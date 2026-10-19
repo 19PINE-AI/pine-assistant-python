@@ -23,6 +23,7 @@ from pine_assistant import (
     validate_external_id,
     validate_user_id,
 )
+from pine_assistant.transport.http import SyncHttpClient
 
 API_KEY = "pine_sk_test_c2VjcmV0LWtleS1mb3ItdGVzdHM"
 EXTERNAL_ID = "acme:user|42-x"
@@ -399,6 +400,33 @@ async def test_injected_client_cannot_add_or_override_the_managed_user():
     assert MANAGED_USER_HEADER not in seen[0].headers
     assert seen[1].headers[MANAGED_USER_HEADER] == PINE_USER_ID
     assert MANAGED_USER_HEADER not in seen[2].headers
+
+
+def test_transport_takes_key_mode_from_api_key_not_from_the_token_text():
+    seen = []
+
+    def handler(request):
+        seen.append(request)
+        return httpx.Response(200, json=success({"sessions": [], "total": 0, "limit": 30, "offset": 0}))
+
+    transport = httpx.MockTransport(handler)
+    token_client = SyncHttpClient(base_url="https://pine.test", token=API_KEY, transport=transport)
+    with pytest.raises(ValueError, match="needs a client built with api_key"):
+        token_client.get("/platform/v1/managed-users/x", as_partner=True)
+    token_client.get("/v2/sessions")
+    token_client.set_token("user-jwt")
+
+    key_client = SyncHttpClient(base_url="https://pine.test", api_key=API_KEY, transport=transport)
+    with pytest.raises(ValueError, match="pass user_id"):
+        key_client.get("/v2/sessions")
+    with pytest.raises(ValueError, match="cannot change its token"):
+        key_client.set_token("user-jwt")
+    with pytest.raises(ValueError, match="either token or api_key"):
+        SyncHttpClient(base_url="https://pine.test", token="user-jwt", api_key=API_KEY, transport=transport)
+
+    [request] = seen
+    assert request.headers["Authorization"] == f"Bearer {API_KEY}"
+    assert MANAGED_USER_HEADER not in request.headers
 
 
 def test_sync_client_supports_platform_and_managed_user_requests():

@@ -97,14 +97,16 @@ def _json_data(response: httpx.Response) -> Any:
 
 
 class _RequestIdentity:
-    """The credential, managed user ID and client name shared by the sync and async transports."""
+    """The credential and managed user ID shared by the sync and async transports."""
 
-    def __init__(self, token: str | None, managed_user_id: str | None) -> None:
-        self._token = token
-        self._managed_user_id = managed_user_id
+    def __init__(self, token: str | None, api_key: str | None, managed_user_id: str | None) -> None:
+        if token is not None and api_key is not None:
+            raise ValueError("pass either token or api_key, not both")
+        self._token = token if api_key is None else api_key
         # A managed user is bound to the API key it was configured with and is
         # never asserted with any other token.
-        self._api_key = token if token is not None and token.startswith(API_KEY_PREFIXES) else None
+        self._api_key = api_key
+        self._managed_user_id = managed_user_id
 
     def ensure_token_can_change(self) -> None:
         if self._api_key is not None:
@@ -154,11 +156,12 @@ class HttpClient(_RequestIdentity):
         client: httpx.AsyncClient | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
         timeout: TimeoutConfig = 30.0,
+        api_key: str | None = None,
         managed_user_id: str | None = None,
     ):
         if client is not None and transport is not None:
             raise ValueError("pass either client or transport, not both")
-        super().__init__(token, managed_user_id)
+        super().__init__(token, api_key, managed_user_id)
         self._api_base_url = _api_url(base_url, api_base_path)
         self._owns_client = client is None
         self._client = client or httpx.AsyncClient(
@@ -251,11 +254,12 @@ class SyncHttpClient(_RequestIdentity):
         client: httpx.Client | None = None,
         transport: httpx.BaseTransport | None = None,
         timeout: TimeoutConfig = 30.0,
+        api_key: str | None = None,
         managed_user_id: str | None = None,
     ) -> None:
         if client is not None and transport is not None:
             raise ValueError("pass either client or transport, not both")
-        super().__init__(token, managed_user_id)
+        super().__init__(token, api_key, managed_user_id)
         self._api_base_url = _api_url(base_url, api_base_path)
         self._owns_client = client is None
         self._client = client or httpx.Client(
