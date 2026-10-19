@@ -36,6 +36,7 @@ class Auth:
 
     async def verify_code(self, email: str, code: str, request_token: str) -> dict[str, Any]:
         """Step 2: Verify code and get access token — spec 4.1.2"""
+        self._http.ensure_token_can_change()
         try:
             result = await self._http.post(
                 "/v2/auth/email/verify",
@@ -119,6 +120,7 @@ class SyncAuth:
             raise _auth_failure(exc) from exc
 
     def verify_code(self, email: str, code: str, request_token: str) -> dict[str, Any]:
+        self._http.ensure_token_can_change()
         try:
             result = self._http.post(
                 "/v2/auth/email/verify",

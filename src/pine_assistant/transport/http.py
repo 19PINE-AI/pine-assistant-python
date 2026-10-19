@@ -11,9 +11,16 @@ from pine_assistant.errors import PineAIError
 DEFAULT_BASE_URL = "https://www.19pine.ai"
 DEFAULT_API_BASE_PATH = "/api"
 _USER_AGENT = "pine-assistant-sdk"
-MANAGED_USER_HEADER = "Pine-Managed-User"
+API_KEY_PREFIXES = ("pine_sk_live_", "pine_sk_test_")
+MANAGED_USER_HEADER = "Pine-Managed-User-Id"
 CLIENT_HEADER = "Pine-Client"
 _IDENTITY_HEADERS = ("Authorization", MANAGED_USER_HEADER, CLIENT_HEADER)
+KEY_ONLY_MESSAGE = (
+    "a client built with api_key alone can call only the Platform API; "
+    "pass user_id to act as a managed user"
+)
+PLATFORM_KEY_MESSAGE = "the Platform API needs a client built with api_key"
+FIXED_KEY_MESSAGE = "a client built with api_key cannot change its token; use a separate client for a user token"
 
 # Public HTTPX timeout inputs accepted by both sync and async clients.  HTTPX's
 # internal ``TimeoutTypes`` alias is not exported in every supported release.
@@ -91,27 +98,36 @@ def _json_data(response: httpx.Response) -> Any:
 
 
 class _RequestIdentity:
-    """The credential, managed user and client name shared by the sync and async transports."""
+    """The credential, managed user ID and client name shared by the sync and async transports."""
 
-    def __init__(self, token: str | None, managed_user: str | None, client_name: str | None) -> None:
+    def __init__(self, token: str | None, managed_user_id: str | None, client_name: str | None) -> None:
         self._token = token
-        self._managed_user = managed_user
+        self._managed_user_id = managed_user_id
         # A managed user is bound to the API key it was configured with and is
-        # never asserted with any other token, e.g. one installed by set_token().
-        self._managed_user_key = token if managed_user else None
+        # never asserted with any other token.
+        self._api_key = token if token is not None and token.startswith(API_KEY_PREFIXES) else None
         self._client_name = client_name
 
+    def ensure_token_can_change(self) -> None:
+        if self._api_key is not None:
+            raise ValueError(FIXED_KEY_MESSAGE)
+
     def set_token(self, token: str | None) -> None:
+        self.ensure_token_can_change()
         self._token = token
 
-    def _identity(self, authenticated: bool, token: str | None, as_tenant: bool) -> dict[str, str]:
-        """The identity headers a request carries; Platform requests the tenant makes as itself omit the user."""
+    def _identity(self, authenticated: bool, token: str | None, as_partner: bool) -> dict[str, str]:
+        """The identity headers a request carries; Platform API requests omit the user."""
+        if as_partner and self._api_key is None:
+            raise ValueError(PLATFORM_KEY_MESSAGE)
         identity: dict[str, str] = {}
         actual_token = self._token if token is None else token
         if authenticated and actual_token:
             identity["Authorization"] = f"Bearer {actual_token}"
-            if self._managed_user and actual_token == self._managed_user_key and not as_tenant:
-                identity[MANAGED_USER_HEADER] = self._managed_user
+            if actual_token == self._api_key and not as_partner:
+                if self._managed_user_id is None:
+                    raise ValueError(KEY_ONLY_MESSAGE)
+                identity[MANAGED_USER_HEADER] = self._managed_user_id
         if self._client_name:
             identity[CLIENT_HEADER] = self._client_name
         return identity
@@ -142,12 +158,12 @@ class HttpClient(_RequestIdentity):
         client: httpx.AsyncClient | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
         timeout: TimeoutConfig = 30.0,
-        managed_user: str | None = None,
+        managed_user_id: str | None = None,
         client_name: str | None = None,
     ):
         if client is not None and transport is not None:
             raise ValueError("pass either client or transport, not both")
-        super().__init__(token, managed_user, client_name)
+        super().__init__(token, managed_user_id, client_name)
         self._api_base_url = _api_url(base_url, api_base_path)
         self._owns_client = client is None
         self._client = client or httpx.AsyncClient(
@@ -156,7 +172,6 @@ class HttpClient(_RequestIdentity):
             transport=transport,
             follow_redirects=False,
         )
-
 
     def _url(self, path: str) -> str:
         # Absolute paths keep an injected client's base_url from changing the
@@ -174,9 +189,9 @@ class HttpClient(_RequestIdentity):
         token: str | None = None,
         files: Any = None,
         extra_headers: dict[str, str] | None = None,
-        as_tenant: bool = False,
+        as_partner: bool = False,
     ) -> Any:
-        identity = self._identity(authenticated, token, as_tenant)
+        identity = self._identity(authenticated, token, as_partner)
         headers = {"Content-Type": "application/json", **(extra_headers or {})}
         if files is not None:
             # httpx must generate the multipart boundary itself.
@@ -194,17 +209,17 @@ class HttpClient(_RequestIdentity):
         return _json_data(response)
 
     async def get(self, path: str, authenticated: bool = True, *, token: str | None = None,
-                  params: dict[str, str | int] | None = None, as_tenant: bool = False) -> Any:
+                  params: dict[str, str | int] | None = None, as_partner: bool = False) -> Any:
         return await self._request(
-            "GET", path, authenticated=authenticated, token=token, params=params, as_tenant=as_tenant,
+            "GET", path, authenticated=authenticated, token=token, params=params, as_partner=as_partner,
         )
 
     async def post(self, path: str, body: dict[str, Any] | None = None, authenticated: bool = True,
                    *, token: str | None = None, headers: dict[str, str] | None = None,
-                   as_tenant: bool = False) -> Any:
+                   as_partner: bool = False) -> Any:
         return await self._request(
             "POST", path, body=body, authenticated=authenticated, token=token, extra_headers=headers,
-            as_tenant=as_tenant,
+            as_partner=as_partner,
         )
 
     async def put(self, path: str, body: dict[str, Any] | None = None, authenticated: bool = True,
@@ -241,12 +256,12 @@ class SyncHttpClient(_RequestIdentity):
         client: httpx.Client | None = None,
         transport: httpx.BaseTransport | None = None,
         timeout: TimeoutConfig = 30.0,
-        managed_user: str | None = None,
+        managed_user_id: str | None = None,
         client_name: str | None = None,
     ) -> None:
         if client is not None and transport is not None:
             raise ValueError("pass either client or transport, not both")
-        super().__init__(token, managed_user, client_name)
+        super().__init__(token, managed_user_id, client_name)
         self._api_base_url = _api_url(base_url, api_base_path)
         self._owns_client = client is None
         self._client = client or httpx.Client(
@@ -255,7 +270,6 @@ class SyncHttpClient(_RequestIdentity):
             transport=transport,
             follow_redirects=False,
         )
-
 
     def _url(self, path: str) -> str:
         return f"{self._api_base_url}/{path.lstrip('/')}"
@@ -271,9 +285,9 @@ class SyncHttpClient(_RequestIdentity):
         token: str | None = None,
         files: Any = None,
         extra_headers: dict[str, str] | None = None,
-        as_tenant: bool = False,
+        as_partner: bool = False,
     ) -> Any:
-        identity = self._identity(authenticated, token, as_tenant)
+        identity = self._identity(authenticated, token, as_partner)
         headers = {"Content-Type": "application/json", **(extra_headers or {})}
         if files is not None:
             headers.pop("Content-Type", None)
@@ -290,17 +304,17 @@ class SyncHttpClient(_RequestIdentity):
         return _json_data(response)
 
     def get(self, path: str, authenticated: bool = True, *, token: str | None = None,
-            params: dict[str, str | int] | None = None, as_tenant: bool = False) -> Any:
+            params: dict[str, str | int] | None = None, as_partner: bool = False) -> Any:
         return self._request(
-            "GET", path, authenticated=authenticated, token=token, params=params, as_tenant=as_tenant,
+            "GET", path, authenticated=authenticated, token=token, params=params, as_partner=as_partner,
         )
 
     def post(self, path: str, body: dict[str, Any] | None = None, authenticated: bool = True,
              *, token: str | None = None, headers: dict[str, str] | None = None,
-             as_tenant: bool = False) -> Any:
+             as_partner: bool = False) -> Any:
         return self._request(
             "POST", path, body=body, authenticated=authenticated, token=token, extra_headers=headers,
-            as_tenant=as_tenant,
+            as_partner=as_partner,
         )
 
     def put(self, path: str, body: dict[str, Any] | None = None, authenticated: bool = True,

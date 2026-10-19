@@ -18,9 +18,16 @@ from pine_assistant.chat import ChatEngine, ChatEvent, Deduplicator, event_from_
 from pine_assistant.errors import ConnectionError
 from pine_assistant.models.events import C2SEvent
 from pine_assistant.models.form import FormSubmissionResult, FormToUserData, encode_form_answers
-from pine_assistant.platform_api import API_KEY_PREFIXES, PlatformAPI, SyncPlatformAPI, validate_external_id
+from pine_assistant.platform_api import PlatformAPI, SyncPlatformAPI, validate_user_id
 from pine_assistant.sessions import SessionsAPI, SyncSessionsAPI
-from pine_assistant.transport.http import DEFAULT_API_BASE_PATH, DEFAULT_BASE_URL, HttpClient, SyncHttpClient
+from pine_assistant.transport.http import (
+    API_KEY_PREFIXES,
+    DEFAULT_API_BASE_PATH,
+    DEFAULT_BASE_URL,
+    KEY_ONLY_MESSAGE,
+    HttpClient,
+    SyncHttpClient,
+)
 from pine_assistant.transport.socketio import SocketIOManager
 
 DEVICE_ID_FILE = Path.home() / ".pine" / "device_id"
@@ -42,23 +49,22 @@ def _platform_identity(
     access_token: str | None,
     user_id: str | None,
     api_key: str | None,
-    managed_user: str | None,
     client_name: str | None,
 ) -> str | None:
     """Validate the credential mode and return the bearer the client sends.
 
-    Error messages never include the key or the external ID.
+    Error messages never include the key or the user ID.
     """
     if client_name is not None and not (isinstance(client_name, str) and _CLIENT_NAME.fullmatch(client_name)):
         raise ValueError("client_name must be 1-64 letters, digits, '.', '_' or '-'")
-    if api_key is None and managed_user is None:
+    if api_key is None:
         return access_token
-    if access_token is not None or user_id is not None:
-        raise ValueError("api_key cannot be combined with access_token or user_id")
+    if access_token is not None:
+        raise ValueError("api_key cannot be combined with access_token")
     if not isinstance(api_key, str) or not api_key.startswith(API_KEY_PREFIXES):
         raise ValueError("api_key must be a Pine Platform secret key starting with pine_sk_live_ or pine_sk_test_")
-    if managed_user is not None:
-        validate_external_id(managed_user, "managed_user")
+    if user_id is not None:
+        validate_user_id(user_id)
     return api_key
 
 
@@ -99,12 +105,13 @@ class AsyncPineAI:
     A client tracks one session. Concurrent sessions need one client each.
 
     Authenticate either as a Pine user with ``access_token`` (and ``user_id``
-    for Socket.IO), or as a Pine Platform tenant with its secret ``api_key``.
-    A tenant client calls the Platform API through ``platform``; adding
-    ``managed_user`` (the tenant's ``external_id``) makes it act as that
-    managed user: every user-scoped REST request carries the key and a
-    ``Pine-Managed-User`` header, the Socket.IO handshake carries both, and
-    ``connect()`` resolves the managed user's Pine user ID itself.
+    for Socket.IO), or as a partner with its secret ``api_key``.
+    A partner client calls the Platform API through ``platform``. Add
+    ``user_id``, the ``id`` of a ``ManagedUser``, to act as that managed user:
+    every user-scoped REST request carries the key and a
+    ``Pine-Managed-User-Id`` header, and the Socket.IO handshake carries both.
+    Without ``user_id``, a user-scoped call raises ``ValueError`` before any
+    request is sent.
     ``client_name`` adds a ``Pine-Client`` header to every REST request and
     to the Socket.IO handshake.
     """
@@ -122,14 +129,14 @@ class AsyncPineAI:
         http_client: httpx.AsyncClient | None = None,
         http_transport: httpx.AsyncBaseTransport | None = None,
         api_key: str | None = None,
-        managed_user: str | None = None,
         client_name: str | None = None,
     ):
-        access_token = _platform_identity(access_token, user_id, api_key, managed_user, client_name)
+        access_token = _platform_identity(access_token, user_id, api_key, client_name)
         self._base_url = base_url
         self._access_token = access_token
         self._user_id = user_id
-        self._managed_user = managed_user
+        self._managed_user_id = user_id if api_key is not None else None
+        self._key_mode = api_key is not None
         self._client_name = client_name
         self._device_id = _get_or_create_device_id(device_id)
         self._transports = transports
@@ -141,7 +148,7 @@ class AsyncPineAI:
             api_base_path=api_base_path,
             client=http_client,
             transport=http_transport,
-            managed_user=managed_user,
+            managed_user_id=self._managed_user_id,
             client_name=client_name,
         )
         self.auth = Auth(self.http)
@@ -164,20 +171,19 @@ class AsyncPineAI:
     async def connect(self, access_token: str | None = None, user_id: str | None = None) -> None:
         """Open Socket.IO and wait until the backend reports it ready.
 
-        With ``api_key``/``managed_user`` the identity is fixed at construction;
-        the managed user's Pine user ID, which envelopes carry, is read once
-        from ``auth.me()`` and reused for the client's lifetime.
+        With ``api_key`` the identity is fixed at construction: ``user_id`` goes
+        in the handshake and in every envelope.
         """
-        if self._managed_user is not None:
-            if access_token is not None or user_id is not None:
-                raise ValueError("a managed-user client cannot connect with another access_token or user_id")
-            if self._user_id is None:
-                self._user_id = (await self.auth.me()).user_id
+        if self._key_mode and (access_token is not None or user_id is not None):
+            raise ValueError("a client built with api_key cannot connect with another access_token or user_id")
+        if self._key_mode and self._managed_user_id is None:
+            raise ValueError(KEY_ONLY_MESSAGE)
         token = access_token or self._access_token
         uid = user_id or self._user_id
         if not token or not uid:
             raise ConnectionError("access_token and user_id required. Run auth flow first.")
-        self.http.set_token(token)
+        if not self._key_mode:
+            self.http.set_token(token)
 
         self._sio = SocketIOManager(
             base_url=self._base_url,
@@ -186,7 +192,7 @@ class AsyncPineAI:
             device_id=self._device_id,
             transports=self._transports,
             ready_timeout=self._ready_timeout,
-            managed_user=self._managed_user,
+            managed_user_id=self._managed_user_id,
             client_name=self._client_name,
         )
         self._chat = ChatEngine(self._sio, check_session_state=self._session_state)
@@ -493,8 +499,8 @@ class PineAI:
     REST resources return concrete values through ``httpx.Client``. Real-time
     Socket.IO requires an event loop and is intentionally available only on
     :class:`AsyncPineAI`; this client does not create a hidden loop or thread.
-    ``api_key``, ``managed_user`` and ``client_name`` behave as on
-    :class:`AsyncPineAI`.
+    ``api_key``, ``user_id`` and ``client_name`` behave as on
+    :class:`AsyncPineAI`; ``user_id`` has no effect without ``api_key``.
     """
 
     def __init__(
@@ -506,16 +512,16 @@ class PineAI:
         http_client: httpx.Client | None = None,
         http_transport: httpx.BaseTransport | None = None,
         api_key: str | None = None,
-        managed_user: str | None = None,
+        user_id: str | None = None,
         client_name: str | None = None,
     ) -> None:
         self.http = SyncHttpClient(
             base_url=base_url,
-            token=_platform_identity(access_token, None, api_key, managed_user, client_name),
+            token=_platform_identity(access_token, user_id, api_key, client_name),
             api_base_path=api_base_path,
             client=http_client,
             transport=http_transport,
-            managed_user=managed_user,
+            managed_user_id=user_id if api_key is not None else None,
             client_name=client_name,
         )
         self.auth = SyncAuth(self.http)

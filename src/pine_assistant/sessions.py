@@ -10,6 +10,7 @@ from pydantic import ValidationError
 
 from pine_assistant.errors import PineAIError, SessionError
 from pine_assistant.models.session import (
+    SessionHistoryPage,
     SessionInfo,
     SessionListResponse,
     SessionMessageStatus,
@@ -55,6 +56,13 @@ def _parse_outcomes_page(payload: Any) -> SessionOutcomesPage:
         raise SessionError("Pine API returned an invalid session outcomes response", "invalid_response") from None
 
 
+def _parse_history_page(payload: Any) -> SessionHistoryPage:
+    try:
+        return SessionHistoryPage.model_validate(payload)
+    except ValidationError:
+        raise SessionError("Pine API returned an invalid session history response", "invalid_response") from None
+
+
 def _request_id(request_id: str | None) -> str | None:
     if request_id is None:
         return None
@@ -65,13 +73,19 @@ def _request_id(request_id: str | None) -> str | None:
     return request_id or None
 
 
-def _outcomes_cursor(before: str | int) -> str:
-    if isinstance(before, bool) or not isinstance(before, (str, int)):
-        raise ValueError("before must be a decimal message identifier")
-    value = str(before).strip()
+def _message_cursor(cursor: str | int, field: str) -> str:
+    if isinstance(cursor, bool) or not isinstance(cursor, (str, int)):
+        raise ValueError(f"{field} must be a decimal message identifier")
+    value = str(cursor).strip()
     if not value.isdecimal():
-        raise ValueError("before must be a decimal message identifier")
+        raise ValueError(f"{field} must be a decimal message identifier")
     return value
+
+
+def _page_limit(limit: int) -> int:
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+        raise ValueError("limit must be between 1 and 100")
+    return limit
 
 
 def _session_error(exc: PineAIError) -> SessionError:
@@ -174,14 +188,26 @@ class SessionsAPI:
         self, session_id: str | int, *, limit: int = 20, before: str | int | None = None,
     ) -> SessionOutcomesPage:
         """List persisted Outcomes newest first; follow ``next_cursor`` for older pages."""
-        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
-            raise ValueError("limit must be between 1 and 100")
-        params: dict[str, str | int] = {"limit": limit}
+        params: dict[str, str | int] = {"limit": _page_limit(limit)}
         if before is not None:
-            params["before"] = _outcomes_cursor(before)
+            params["before"] = _message_cursor(before, "before")
         try:
             return _parse_outcomes_page(
                 await self._http.get(f"/v2/sessions/{_session_id(session_id)}/outcomes", params=params),
+            )
+        except PineAIError as exc:
+            raise _session_error(exc) from exc
+
+    async def history(
+        self, session_id: str | int, *, limit: int = 30, before_message_id: str | int | None = None,
+    ) -> SessionHistoryPage:
+        """Read stored visible messages newest first; follow ``next_message_id`` for older pages."""
+        params: dict[str, str | int] = {"limit": _page_limit(limit)}
+        if before_message_id is not None:
+            params["before_message_id"] = _message_cursor(before_message_id, "before_message_id")
+        try:
+            return _parse_history_page(
+                await self._http.get(f"/v2/sessions/{_session_id(session_id)}/messages", params=params),
             )
         except PineAIError as exc:
             raise _session_error(exc) from exc
@@ -316,14 +342,26 @@ class SyncSessionsAPI:
         self, session_id: str | int, *, limit: int = 20, before: str | int | None = None,
     ) -> SessionOutcomesPage:
         """List persisted Outcomes newest first; follow ``next_cursor`` for older pages."""
-        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
-            raise ValueError("limit must be between 1 and 100")
-        params: dict[str, str | int] = {"limit": limit}
+        params: dict[str, str | int] = {"limit": _page_limit(limit)}
         if before is not None:
-            params["before"] = _outcomes_cursor(before)
+            params["before"] = _message_cursor(before, "before")
         try:
             return _parse_outcomes_page(
                 self._http.get(f"/v2/sessions/{_session_id(session_id)}/outcomes", params=params),
+            )
+        except PineAIError as exc:
+            raise _session_error(exc) from exc
+
+    def history(
+        self, session_id: str | int, *, limit: int = 30, before_message_id: str | int | None = None,
+    ) -> SessionHistoryPage:
+        """Read stored visible messages newest first; follow ``next_message_id`` for older pages."""
+        params: dict[str, str | int] = {"limit": _page_limit(limit)}
+        if before_message_id is not None:
+            params["before_message_id"] = _message_cursor(before_message_id, "before_message_id")
+        try:
+            return _parse_history_page(
+                self._http.get(f"/v2/sessions/{_session_id(session_id)}/messages", params=params),
             )
         except PineAIError as exc:
             raise _session_error(exc) from exc

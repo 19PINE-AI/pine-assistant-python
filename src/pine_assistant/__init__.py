@@ -22,6 +22,8 @@ from pine_assistant.models.events import (
 )
 from pine_assistant.models.platform import ManagedUser
 from pine_assistant.models.session import (
+    SessionHistoryMessage,
+    SessionHistoryPage,
     SessionInfo,
     SessionListResponse,
     SessionMessageStatus,
@@ -30,17 +32,17 @@ from pine_assistant.models.session import (
     SessionOutcomesPage,
 )
 from pine_assistant.platform_api import (
-    API_KEY_PREFIXES,
     ManagedUsersAPI,
     PlatformAPI,
     SyncManagedUsersAPI,
     SyncPlatformAPI,
     validate_external_id,
+    validate_user_id,
 )
 from pine_assistant.sessions import SessionsAPI, SyncSessionsAPI
-from pine_assistant.transport.http import CLIENT_HEADER, MANAGED_USER_HEADER
+from pine_assistant.transport.http import API_KEY_PREFIXES, CLIENT_HEADER, MANAGED_USER_HEADER
 
-__version__ = "0.5.0rc1"
+__version__ = "0.5.0rc2"
 __all__ = [
     "PineAI",
     "AsyncPineAI",
@@ -57,10 +59,13 @@ __all__ = [
     "MANAGED_USER_HEADER",
     "CLIENT_HEADER",
     "validate_external_id",
+    "validate_user_id",
     "AuthIdentity",
     "AuthTicket",
     "RedeemedTicket",
     "SessionInfo",
+    "SessionHistoryMessage",
+    "SessionHistoryPage",
     "SessionListResponse",
     "SessionMessageStatus",
     "SessionOutcome",

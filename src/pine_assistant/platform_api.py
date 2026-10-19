@@ -1,9 +1,9 @@
 """
-Pine Platform API — enterprise (tenant) resources authenticated by a secret key.
+Pine Platform API — resources of a partner, authenticated by its secret key.
 
-A tenant's secret key (``pine_sk_live_...`` / ``pine_sk_test_...``) belongs on
-its servers only. These requests act as the tenant itself and never carry a
-``Pine-Managed-User`` header.
+A partner's secret key (``pine_sk_live_...`` / ``pine_sk_test_...``) belongs on
+its servers only. These requests act as the partner itself and never carry a
+``Pine-Managed-User-Id`` header.
 """
 
 from __future__ import annotations
@@ -17,9 +17,10 @@ from pine_assistant.errors import PineAIError, PlatformError
 from pine_assistant.models.platform import ManagedUser
 from pine_assistant.transport.http import HttpClient, SyncHttpClient
 
-API_KEY_PREFIXES = ("pine_sk_live_", "pine_sk_test_")
 _EXTERNAL_ID = re.compile(r"[A-Za-z0-9_:|-][A-Za-z0-9._:|-]{0,127}")
 _MANAGED_USERS = "/platform/v1/managed-users"
+_USER_ID = re.compile(r"[1-9][0-9]{0,18}")
+_MAX_USER_ID = 9223372036854775807
 
 
 def validate_external_id(value: str, field: str = "external_id") -> str:
@@ -27,6 +28,16 @@ def validate_external_id(value: str, field: str = "external_id") -> str:
     if not isinstance(value, str) or not _EXTERNAL_ID.fullmatch(value):
         raise ValueError(
             f"{field} must be 1-128 letters, digits, '.', '_', ':', '|' or '-' and must not start with '.'"
+        )
+    return value
+
+
+def validate_user_id(value: str, field: str = "user_id") -> str:
+    """Check the backend's Pine user ID rule; the value is never echoed on failure."""
+    if not isinstance(value, str) or not _USER_ID.fullmatch(value) or int(value) > _MAX_USER_ID:
+        raise ValueError(
+            f'{field} must be a string such as "123456789": the decimal Pine user ID, '
+            "with no sign, spaces or leading zeros"
         )
     return value
 
@@ -60,22 +71,22 @@ class ManagedUsersAPI:
     async def create(self, external_id: str, *, email: str, name: str, phone: str | None = None) -> ManagedUser:
         """Create the managed user for ``external_id``, or return the existing one unchanged.
 
-        Idempotent per integration and ``external_id``: a repeated call returns
+        Idempotent per partner and ``external_id``: a repeated call returns
         the stored user even when ``email``, ``name`` or ``phone`` differ.
         ``phone`` is an E.164 number you have verified.
         """
         body = _create_body(external_id, email, name, phone)
         try:
-            payload = await self._http.post(_MANAGED_USERS, body, as_tenant=True)
+            payload = await self._http.post(_MANAGED_USERS, body, as_partner=True)
         except PineAIError as exc:
             raise _platform_failure(exc) from None
         return _parse_managed_user(payload)
 
     async def get(self, external_id: str) -> ManagedUser:
-        """Return the managed user for ``external_id``; another integration's user is a 404."""
+        """Return the managed user for ``external_id``; another partner's user is a 404."""
         path = _path(external_id)
         try:
-            payload = await self._http.get(path, as_tenant=True)
+            payload = await self._http.get(path, as_partner=True)
         except PineAIError as exc:
             raise _platform_failure(exc) from None
         return _parse_managed_user(payload)
@@ -88,7 +99,7 @@ class SyncManagedUsersAPI:
     def create(self, external_id: str, *, email: str, name: str, phone: str | None = None) -> ManagedUser:
         body = _create_body(external_id, email, name, phone)
         try:
-            payload = self._http.post(_MANAGED_USERS, body, as_tenant=True)
+            payload = self._http.post(_MANAGED_USERS, body, as_partner=True)
         except PineAIError as exc:
             raise _platform_failure(exc) from None
         return _parse_managed_user(payload)
@@ -96,7 +107,7 @@ class SyncManagedUsersAPI:
     def get(self, external_id: str) -> ManagedUser:
         path = _path(external_id)
         try:
-            payload = self._http.get(path, as_tenant=True)
+            payload = self._http.get(path, as_partner=True)
         except PineAIError as exc:
             raise _platform_failure(exc) from None
         return _parse_managed_user(payload)

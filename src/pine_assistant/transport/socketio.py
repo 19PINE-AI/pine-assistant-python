@@ -2,7 +2,7 @@
 Socket.IO connection manager — spec sections 3.1, 5.1.2.
 
 Connection: wss://{baseUrl}/api/v2/socket.io/ with auth={token}, plus
-managed_user when a Platform API key acts for a managed user.
+managed_user_id when a Platform API key acts for a managed user.
 Waits for `ready` event before resolving connect().
 """
 
@@ -43,12 +43,12 @@ class SocketIOManager:
         device_id: str | None = None,
         transports: list[str] | None = None,
         ready_timeout: float = 15.0,
-        managed_user: str | None = None,
+        managed_user_id: str | None = None,
         client_name: str | None = None,
     ):
         self._base_url = base_url
         self._token = token
-        self._managed_user = managed_user
+        self._managed_user_id = managed_user_id
         self._client_name = client_name
         self._user_id = user_id
         self._device_id = device_id or str(uuid.uuid4())
@@ -181,11 +181,14 @@ class SocketIOManager:
             self._connected = False
             self._disconnect_event.set()
             # The Pine backend accepts the WebSocket but only emits 'ready' after
-            # its own auth check. A timeout here almost always means the token or
-            # user_id is rejected — surface that hint instead of a generic timeout.
+            # its own auth check. A timeout here almost always means the
+            # credentials are rejected — surface that hint instead of a generic timeout.
+            if self._managed_user_id:
+                hint = "Check api_key and user_id."
+            else:
+                hint = "This usually means access_token or user_id is invalid/expired — re-run the auth flow."
             raise PineConnectionError(
-                f"Socket.IO connected but no 'ready' event after {self._ready_timeout}s. "
-                "This usually means access_token or user_id is invalid/expired — re-run the auth flow."
+                f"Socket.IO connected but no 'ready' event after {self._ready_timeout}s. {hint}"
             ) from None
         self._connection_generation += 1
         # An earlier connection may still be unwinding after its disconnect.
@@ -199,8 +202,8 @@ class SocketIOManager:
 
     def _handshake_auth(self) -> dict[str, str]:
         auth = {"token": self._token}
-        if self._managed_user:
-            auth["managed_user"] = self._managed_user
+        if self._managed_user_id:
+            auth["managed_user_id"] = self._managed_user_id
         return auth
 
     def _track_membership(self, event_type: str, session_id: str | None) -> None:
