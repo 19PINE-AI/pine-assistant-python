@@ -106,7 +106,7 @@ never retry or replay form submissions. A transport ACK is not a delivery
 receipt. The legacy synchronous `send_form_response()` is deprecated because it
 cannot verify the original form request.
 
-## Integrating as an enterprise (Platform API)
+## Platform API for partners
 
 A *partner* is a business that builds on Pine through the Platform API. It
 holds a secret key, `pine_sk_live_...`. Keep it on your servers: read it
@@ -174,7 +174,7 @@ A key client keeps its key; use a separate client for a user token.
 
 Every error below is a `PineAIError` with `code` and `status_code`, so catch
 `PineAIError`. Some methods raise a subclass: `SessionError` from
-`sessions.list`, `get`, `end_task`, `send_message`, `history` and `outcomes`, and
+`sessions.list`, `get`, `send_message`, `history` and `outcomes`, and
 `AuthError` from `auth.*`. Other `sessions` methods, such as `create` and
 `start_task`, raise `PineAIError` itself.
 
@@ -197,10 +197,7 @@ sends no error code. `connect()` then raises `ConnectionError` when
 `connection_error`, so it does not tell you the cause. The message tells you to
 check `api_key` and `user_id`.
 
-`PineAI` accepts the same `api_key` and `user_id` for synchronous REST.
-`client_name="..."` sends a `Pine-Client` header on REST requests and on the
-Socket.IO handshake. The backend records it as the source only for requests made
-with a partner key, and only the value `mcp`; it changes no behavior. Platform
+`PineAI` accepts the same `api_key` and `user_id` for synchronous REST. Platform
 API failures raise `PlatformError` with a stable `code` and `status_code` (for
 example 401 for a bad key, 403 for a suspended partner, 404
 `platform_managed_user_not_found`, 409 `platform_managed_user_limit_reached`).

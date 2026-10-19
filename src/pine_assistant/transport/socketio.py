@@ -16,7 +16,6 @@ import socketio
 
 from pine_assistant.errors import ConnectionError as PineConnectionError
 from pine_assistant.models.form import FormSubmissionResult
-from pine_assistant.transport.http import CLIENT_HEADER
 
 SOCKETIO_PATH = "/api/v2/socket.io/"
 
@@ -44,12 +43,10 @@ class SocketIOManager:
         transports: list[str] | None = None,
         ready_timeout: float = 15.0,
         managed_user_id: str | None = None,
-        client_name: str | None = None,
     ):
         self._base_url = base_url
         self._token = token
         self._managed_user_id = managed_user_id
-        self._client_name = client_name
         self._user_id = user_id
         self._device_id = device_id or str(uuid.uuid4())
         self._transports = transports or ["websocket"]
@@ -151,7 +148,6 @@ class SocketIOManager:
             await self._sio.connect(
                 self._base_url,
                 auth=self._handshake_auth(),
-                headers={CLIENT_HEADER: self._client_name} if self._client_name else {},
                 transports=self._transports,
                 socketio_path=SOCKETIO_PATH,
                 wait_timeout=self._ready_timeout,

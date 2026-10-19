@@ -30,11 +30,10 @@ Internal release candidate for 0.5.0.
   These also raise `ValueError`: `api_key` with `access_token`, identity
   overrides passed to `connect()` in key mode, `platform.*` on a client without
   `api_key`, and `auth.verify_code()` or `set_token()` on a client with
-  `api_key` (checked before the code is sent).
-- `client_name` adds a `Pine-Client` header to every REST request and to the
-  Socket.IO handshake.
+  `api_key` (checked before the code is sent). A Platform key passed as
+  `access_token` raises `ValueError` that says to pass it as `api_key`.
 - `API_KEY_PREFIXES` (`pine_sk_live_`, `pine_sk_test_`), `validate_external_id`,
-  `validate_user_id`, `MANAGED_USER_HEADER` and `CLIENT_HEADER` are public. The
+  `validate_user_id` and `MANAGED_USER_HEADER` are public. The
   managed-user header is sent only with the API key it was configured with, and
   identity headers are applied after caller headers, so neither can be
   overridden per request. Error messages never contain the key, the

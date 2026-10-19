@@ -139,4 +139,5 @@ class SessionHistoryPage(BaseModel):
     def normalize_cursor(cls, value: Any) -> str | None:
         if value is None or value == "":
             return None
-        return SessionInfo.normalize_id(value)
+        else:
+            return SessionInfo.normalize_id(value)

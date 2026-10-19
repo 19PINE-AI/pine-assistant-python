@@ -54,7 +54,6 @@ class FakeBackend:
     base_url: str = ""
     requests: list[dict[str, Any]] = field(default_factory=list)
     handshakes: list[Any] = field(default_factory=list)
-    handshake_clients: list[str | None] = field(default_factory=list)
     envelopes: list[dict[str, Any]] = field(default_factory=list)
     error_status: int | None = None
     error_code: str = "platform_failure"
@@ -69,7 +68,6 @@ class FakeBackend:
         @sio.event
         async def connect(sid, environ, auth):
             self.handshakes.append(auth)
-            self.handshake_clients.append(environ.get("HTTP_PINE_CLIENT"))
             if self.refuse_handshake:
                 # Like the Pine backend: accept the connection, then close it
                 # with no connect_error and no code.
@@ -166,10 +164,8 @@ def _assert_no_secrets(text: str) -> None:
 
 
 @pytest.mark.asyncio
-async def test_managed_user_rest_requests_carry_key_header_and_client_name(backend):
-    async with AsyncPineAI(
-        api_key=API_KEY, user_id=PINE_USER_ID, client_name="mcp", base_url=backend.base_url,
-    ) as client:
+async def test_managed_user_rest_requests_carry_the_key_and_the_header(backend):
+    async with AsyncPineAI(api_key=API_KEY, user_id=PINE_USER_ID, base_url=backend.base_url) as client:
         listed = await client.sessions.list()
 
     assert listed.sessions[0].id == "7"
@@ -177,7 +173,6 @@ async def test_managed_user_rest_requests_carry_key_header_and_client_name(backe
     assert request["headers"]["Authorization"] == f"Bearer {API_KEY}"
     assert request["headers"]["Pine-Managed-User-Id"] == PINE_USER_ID
     assert "Pine-Managed-User" not in request["headers"]
-    assert request["headers"]["Pine-Client"] == "mcp"
 
 
 @pytest.mark.asyncio
@@ -203,17 +198,7 @@ async def test_managed_user_connect_sends_the_id_in_handshake_and_envelope_witho
     assert backend.requests == []
     assert backend.handshakes == [{"token": API_KEY, "managed_user_id": PINE_USER_ID}] * 2
     assert all(isinstance(auth["managed_user_id"], str) for auth in backend.handshakes)
-    assert backend.handshake_clients == [None, None]
     assert backend.envelopes[0]["metadata"]["source"]["user_id"] == PINE_USER_ID
-
-
-@pytest.mark.asyncio
-async def test_client_name_is_sent_on_the_socketio_handshake(backend):
-    async with AsyncPineAI(
-        api_key=API_KEY, user_id=PINE_USER_ID, client_name="mcp", base_url=backend.base_url,
-    ) as client:
-        await client.connect()
-    assert backend.handshake_clients == ["mcp"]
 
 
 @pytest.mark.asyncio
@@ -357,7 +342,8 @@ def test_validate_user_id_accepts_canonical_ids(value):
         {"api_key": API_KEY, "user_id": "9223372036854775808"},
         {"api_key": API_KEY, "user_id": 730194412688371},
         {"api_key": API_KEY, "user_id": True},
-        {"api_key": API_KEY, "client_name": "bad name"},
+        {"access_token": API_KEY},
+        {"access_token": API_KEY, "user_id": PINE_USER_ID},
     ],
 )
 def test_invalid_platform_configuration_is_rejected_without_echoing_values(kwargs):
@@ -370,10 +356,11 @@ def test_invalid_platform_configuration_is_rejected_without_echoing_values(kwarg
                 assert str(value) not in str(excinfo.value)
 
 
-def test_managed_user_constructor_is_gone():
+@pytest.mark.parametrize("removed", [{"managed_user": EXTERNAL_ID}, {"client_name": "mcp"}])
+def test_removed_constructor_arguments_are_gone(removed):
     for client_type in (AsyncPineAI, PineAI):
         with pytest.raises(TypeError):
-            client_type(api_key=API_KEY, managed_user=EXTERNAL_ID)
+            client_type(api_key=API_KEY, user_id=PINE_USER_ID, **removed)
 
 
 @pytest.mark.asyncio
@@ -424,7 +411,7 @@ def test_sync_client_supports_platform_and_managed_user_requests():
         return httpx.Response(200, json=success({"sessions": [], "total": 0, "limit": 30, "offset": 0}))
 
     with PineAI(
-        api_key=API_KEY, user_id=PINE_USER_ID, client_name="mcp", base_url="https://pine.test",
+        api_key=API_KEY, user_id=PINE_USER_ID, base_url="https://pine.test",
         http_transport=httpx.MockTransport(handler),
     ) as client:
         created = client.platform.managed_users.create(EXTERNAL_ID, email="ada@example.com", name="Ada Lovelace")
@@ -435,7 +422,6 @@ def test_sync_client_supports_platform_and_managed_user_requests():
     assert MANAGED_USER_HEADER not in seen[0].headers
     assert seen[1].headers[MANAGED_USER_HEADER] == PINE_USER_ID
     assert all(request.headers["Authorization"] == f"Bearer {API_KEY}" for request in seen)
-    assert all(request.headers["Pine-Client"] == "mcp" for request in seen)
 
 
 @pytest.mark.asyncio
@@ -509,7 +495,7 @@ async def test_platform_calls_need_a_key_client(backend):
 
 @pytest.mark.asyncio
 async def test_caller_headers_cannot_override_identity(backend):
-    forged = {"Authorization": "Bearer forged", MANAGED_USER_HEADER: "1", "Pine-Client": "forged"}
+    forged = {"Authorization": "Bearer forged", MANAGED_USER_HEADER: "1"}
     async with AsyncPineAI(api_key=API_KEY, user_id=PINE_USER_ID, base_url=backend.base_url) as client:
         await client.http.post("/v2/sessions", {}, headers=forged)
     async with AsyncPineAI(access_token="user-token", base_url=backend.base_url) as client:
@@ -518,9 +504,8 @@ async def test_caller_headers_cannot_override_identity(backend):
     managed, user = (request["headers"] for request in backend.requests)
     assert managed["Authorization"] == f"Bearer {API_KEY}"
     assert managed[MANAGED_USER_HEADER] == PINE_USER_ID
-    assert "Pine-Client" not in managed
     assert user["Authorization"] == "Bearer user-token"
-    assert MANAGED_USER_HEADER not in user and "Pine-Client" not in user
+    assert MANAGED_USER_HEADER not in user
 
 
 def test_public_platform_names():

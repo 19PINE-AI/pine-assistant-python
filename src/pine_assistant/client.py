@@ -5,7 +5,6 @@ PineAI / AsyncPineAI — main SDK clients.
 import asyncio
 import logging
 import os
-import re
 import uuid
 from collections.abc import AsyncGenerator, Callable
 from pathlib import Path
@@ -40,8 +39,6 @@ HISTORY_MAX_PAGES = 100
 FORM_RESPONSE_TIMEOUT_S = 10.0
 FORM_RESPONSE_MAX_TIMEOUT_S = 30.0
 
-_CLIENT_NAME = re.compile(r"[A-Za-z0-9._-]{1,64}")
-
 _logger = logging.getLogger(__name__)
 
 
@@ -49,14 +46,13 @@ def _platform_identity(
     access_token: str | None,
     user_id: str | None,
     api_key: str | None,
-    client_name: str | None,
 ) -> str | None:
     """Validate the credential mode and return the bearer the client sends.
 
     Error messages never include the key or the user ID.
     """
-    if client_name is not None and not (isinstance(client_name, str) and _CLIENT_NAME.fullmatch(client_name)):
-        raise ValueError("client_name must be 1-64 letters, digits, '.', '_' or '-'")
+    if api_key is None and isinstance(access_token, str) and access_token.startswith(API_KEY_PREFIXES):
+        raise ValueError("pass a Pine Platform secret key as api_key, not as access_token")
     if api_key is None:
         return access_token
     if access_token is not None:
@@ -112,8 +108,6 @@ class AsyncPineAI:
     ``Pine-Managed-User-Id`` header, and the Socket.IO handshake carries both.
     Without ``user_id``, a user-scoped call raises ``ValueError`` before any
     request is sent.
-    ``client_name`` adds a ``Pine-Client`` header to every REST request and
-    to the Socket.IO handshake.
     """
 
     def __init__(
@@ -129,15 +123,13 @@ class AsyncPineAI:
         http_client: httpx.AsyncClient | None = None,
         http_transport: httpx.AsyncBaseTransport | None = None,
         api_key: str | None = None,
-        client_name: str | None = None,
     ):
-        access_token = _platform_identity(access_token, user_id, api_key, client_name)
+        access_token = _platform_identity(access_token, user_id, api_key)
         self._base_url = base_url
         self._access_token = access_token
         self._user_id = user_id
         self._managed_user_id = user_id if api_key is not None else None
         self._key_mode = api_key is not None
-        self._client_name = client_name
         self._device_id = _get_or_create_device_id(device_id)
         self._transports = transports
         self._ready_timeout = ready_timeout
@@ -149,7 +141,6 @@ class AsyncPineAI:
             client=http_client,
             transport=http_transport,
             managed_user_id=self._managed_user_id,
-            client_name=client_name,
         )
         self.auth = Auth(self.http)
         self.sessions = SessionsAPI(self.http)
@@ -193,7 +184,6 @@ class AsyncPineAI:
             transports=self._transports,
             ready_timeout=self._ready_timeout,
             managed_user_id=self._managed_user_id,
-            client_name=self._client_name,
         )
         self._chat = ChatEngine(self._sio, check_session_state=self._session_state)
         await self._sio.connect()
@@ -499,7 +489,7 @@ class PineAI:
     REST resources return concrete values through ``httpx.Client``. Real-time
     Socket.IO requires an event loop and is intentionally available only on
     :class:`AsyncPineAI`; this client does not create a hidden loop or thread.
-    ``api_key``, ``user_id`` and ``client_name`` behave as on
+    ``api_key`` and ``user_id`` behave as on
     :class:`AsyncPineAI`; ``user_id`` has no effect without ``api_key``.
     """
 
@@ -513,16 +503,14 @@ class PineAI:
         http_transport: httpx.BaseTransport | None = None,
         api_key: str | None = None,
         user_id: str | None = None,
-        client_name: str | None = None,
     ) -> None:
         self.http = SyncHttpClient(
             base_url=base_url,
-            token=_platform_identity(access_token, user_id, api_key, client_name),
+            token=_platform_identity(access_token, user_id, api_key),
             api_base_path=api_base_path,
             client=http_client,
             transport=http_transport,
             managed_user_id=user_id if api_key is not None else None,
-            client_name=client_name,
         )
         self.auth = SyncAuth(self.http)
         self.sessions = SyncSessionsAPI(self.http)
