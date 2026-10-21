@@ -116,7 +116,7 @@ user = await partner_client.platform.managed_users.update(
 | `sessions.get(session_id)` | `SessionInfo` |
 | `sessions.get_config(session_id)` | `SessionConfig` |
 | `sessions.update_config(session_id, *, caller_id)` | `SessionConfig` after the change |
-| `sessions.send_message(session_id, content, ..., client_now_date=None)` | `SessionMessageStatus` |
+| `sessions.send_message(session_id, content, ..., timezone=None)` | `SessionMessageStatus` |
 | `sessions.history(session_id, *, limit=30, before_message_id=None)` | `SessionHistoryPage`: one page of stored messages, newest first |
 | `sessions.start_task(session_id)` | `dict` |
 | `sessions.stop_task(session_id)` | `dict` |
@@ -149,9 +149,8 @@ caller ID. `caller_id` is a session setting that selects it:
 | `"user"`, or not set | The user's assistant number if it has one, else the user's phone, else a number of the platform's pool. |
 | `"platform"` | A number of the platform's pool. |
 
-- Set it after `sessions.create()` and before the first message.
-- You can change it while a task runs. The agent uses the new value for its
-  next call. A call in progress does not change.
+- Set or change it at any time. The agent uses the value for its next call. A
+  call in progress does not change.
 - `caller_id` does not change how the agent reaches the user. The agent still
   uses the user's phone for that.
 - A 503 `session_config_push_failed` means that the value is saved, but the
@@ -164,36 +163,24 @@ await client.sessions.update_config(session["id"], caller_id="platform")
 await client.sessions.send_message(session["id"], "Call the clinic to book a visit")
 ```
 
-> **Caution:** carriers rate each caller ID (STIR/SHAKEN). The rating depends
-> on whether the carrier that places the call owns the number. So a call can
-> get a lower rating (B or C) with any caller ID, most often with the user's
-> phone. The person who is called can then see the call as suspicious, or not
-> answer. Some lines cannot show the user's phone, and a retry of a call can
-> show a number of the platform's pool. You are responsible for the phone
-> numbers you give for your users.
-
 ### The user's time
 
 The agent must know the user's time zone to understand words such as
-"tomorrow at 9 am". Send the user's current local time, with its UTC offset,
-as `client_now_date` with each message. The Pine app does the same.
+"tomorrow at 9 am". Pass the user's time zone as `timezone` with each
+message. The SDK then sends the user's current local time with the message,
+as the Pine app does.
 
-- The value is an RFC 3339 time with an offset, for example
-  `2026-10-21T09:00:00-04:00`. Pine uses only the offset.
-- A value without an offset raises `ValueError` before any request is sent.
-- If a session never got `client_now_date`, the agent uses UTC. After one
-  message with it, the agent keeps that offset until a message brings a new
-  one.
+- `timezone` is an IANA time zone name, such as `"America/New_York"`, or a
+  `tzinfo`. Daylight saving time is handled for you.
+- An unknown name raises `ValueError` before any request is sent.
+- If a session never got a time zone, the agent uses UTC. After one message
+  with it, the agent keeps that time zone until a message brings a new one.
 
 ```python
-from datetime import datetime
-from zoneinfo import ZoneInfo
-
-now = datetime.now(ZoneInfo("America/New_York")).isoformat(timespec="seconds")
-await client.sessions.send_message(session_id, "Book a table for tomorrow at 7 pm", client_now_date=now)
+await client.sessions.send_message(session_id, "Book a table for tomorrow at 7 pm", timezone="America/New_York")
 ```
 
-`chat()` and `send_message()` on Socket.IO take the same `client_now_date`.
+`chat()` and `send_message()` on Socket.IO take the same `timezone`.
 
 ### Real time (`AsyncPineAI` only)
 
@@ -266,6 +253,5 @@ Error messages never contain the key, the `external_id` or the user ID.
 |---|---|
 | `validate_user_id(value)` | Checks the form of a managed user's `id`. |
 | `validate_external_id(value)` | Checks the form of an `external_id`. |
-| `validate_client_now_date(value)` | Checks that a `client_now_date` has a UTC offset. |
 | `API_KEY_PREFIXES` | The prefixes that a valid key starts with. |
 | `MANAGED_USER_HEADER` | `"Pine-Managed-User-Id"` |

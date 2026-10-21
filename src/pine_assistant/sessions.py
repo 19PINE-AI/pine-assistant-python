@@ -4,9 +4,9 @@ Sessions REST API — spec section 4.3.
 
 from __future__ import annotations
 
-import re
-from datetime import datetime
+from datetime import datetime, tzinfo
 from typing import Any, get_args
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import ValidationError
 
@@ -22,30 +22,27 @@ from pine_assistant.models.session import (
 )
 from pine_assistant.transport.http import HttpClient, SyncHttpClient
 
-_CLIENT_NOW_DATE = re.compile(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)")
+_TIMEZONE_MESSAGE = 'timezone must be an IANA time zone name such as "America/New_York", or a tzinfo'
 
 
-def _is_calendar_time(text: str) -> bool:
+def _zone(timezone: str | tzinfo) -> tzinfo:
+    if isinstance(timezone, tzinfo):
+        return timezone
     try:
-        datetime.fromisoformat(text)
-    except ValueError:
-        return False
-    else:
-        return True
+        return ZoneInfo(timezone)
+    except (TypeError, ValueError, ZoneInfoNotFoundError):
+        raise ValueError(_TIMEZONE_MESSAGE) from None
 
 
-def validate_client_now_date(value: str | None) -> str | None:
-    """Check the backend's rule: an RFC 3339 time with a UTC offset, such as ``2026-10-21T09:00:00-04:00``.
-
-    Pine reads only the offset, as the user's time zone. A value without one
-    would be dropped by the backend, so it is refused here.
-    """
-    if value is None:
+def client_now_date(timezone: str | tzinfo | None) -> str | None:
+    if timezone is None:
         return None
-    match = _CLIENT_NOW_DATE.fullmatch(value) if isinstance(value, str) else None
-    if match is None or not _is_calendar_time(match.group(1)):
-        raise ValueError("client_now_date must be an RFC 3339 time with a UTC offset, such as 2026-10-21T09:00:00-04:00")
-    return value
+    zone = _zone(timezone)
+    try:
+        now = datetime.now(zone)
+    except ValueError:
+        raise ValueError(_TIMEZONE_MESSAGE) from None
+    return now.isoformat(timespec="seconds")
 
 
 def _caller_id(caller_id: CallerID) -> CallerID:
@@ -186,11 +183,10 @@ class SessionsAPI:
 
         ``"user"``, or not set, presents the user's assistant number if it has
         one, else the user's phone, else a number of the platform's pool;
-        ``"platform"`` presents a number of the platform's pool. Set it before
-        the first message, or any time later: a running agent gets it before
-        its next call. A 503 ``session_config_push_failed`` means the value is
-        saved but has not reached the running agent yet; send the same value
-        again.
+        ``"platform"`` presents a number of the platform's pool. Set it at any
+        time: the agent uses the value for its next call. A 503
+        ``session_config_push_failed`` means the value is saved but has not
+        reached the running agent yet; send the same value again.
         """
         body = {"caller_id": _caller_id(caller_id)}
         try:
@@ -222,7 +218,7 @@ class SessionsAPI:
         library_artifact_ids: list[str] | None = None,
         referenced_sessions: list[dict[str, str]] | None = None,
         quote: dict[str, str] | None = None,
-        client_now_date: str | None = None,
+        timezone: str | tzinfo | None = None,
         request_id: str | None = None,
     ) -> SessionMessageStatus:
         """Persist and hand off a new user message without waiting for task completion.
@@ -242,7 +238,7 @@ class SessionsAPI:
             "library_artifact_ids": library_artifact_ids,
             "referenced_sessions": referenced_sessions,
             "quote": quote,
-            "client_now_date": validate_client_now_date(client_now_date),
+            "client_now_date": client_now_date(timezone),
         }.items():
             if value is not None:
                 body[key] = value
@@ -394,7 +390,7 @@ class SyncSessionsAPI:
         library_artifact_ids: list[str] | None = None,
         referenced_sessions: list[dict[str, str]] | None = None,
         quote: dict[str, str] | None = None,
-        client_now_date: str | None = None,
+        timezone: str | tzinfo | None = None,
         request_id: str | None = None,
     ) -> SessionMessageStatus:
         """Persist and hand off a new user message without waiting for task completion."""
@@ -409,7 +405,7 @@ class SyncSessionsAPI:
             "library_artifact_ids": library_artifact_ids,
             "referenced_sessions": referenced_sessions,
             "quote": quote,
-            "client_now_date": validate_client_now_date(client_now_date),
+            "client_now_date": client_now_date(timezone),
         }.items():
             if value is not None:
                 body[key] = value

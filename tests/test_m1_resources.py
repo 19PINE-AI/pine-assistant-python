@@ -265,7 +265,6 @@ async def test_async_session_message_serializes_supported_fields_and_preserves_s
                 library_artifact_ids=["artifact-1"],
                 referenced_sessions=[{"session_id": "6", "title": "Earlier work"}],
                 quote={"text": "The prior quote"},
-                client_now_date="2026-09-18T09:30:00-07:00",
                 request_id="click-18",
             ))
 
@@ -282,7 +281,6 @@ async def test_async_session_message_serializes_supported_fields_and_preserves_s
         "library_artifact_ids": ["artifact-1"],
         "referenced_sessions": [{"session_id": "6", "title": "Earlier work"}],
         "quote": {"text": "The prior quote"},
-        "client_now_date": "2026-09-18T09:30:00-07:00",
     }
 
 

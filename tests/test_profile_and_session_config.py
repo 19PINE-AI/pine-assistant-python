@@ -1,6 +1,10 @@
-"""Managed-user update, assistant, session config, identity catalog and client_now_date."""
+"""Managed-user update, assistant, session config, identity catalog and the user's time zone."""
 
 import json
+import re
+from datetime import datetime, timedelta, tzinfo
+from datetime import timezone as dt_timezone
+from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
@@ -15,7 +19,6 @@ from pine_assistant import (
     PlatformError,
     SessionConfig,
     SessionError,
-    validate_client_now_date,
 )
 from pine_assistant.chat import ChatEngine
 
@@ -288,52 +291,68 @@ def test_managed_user_client_reads_the_catalog_as_the_user():
     assert request.headers[MANAGED_USER_HEADER] == PINE_USER_ID
 
 
-@pytest.mark.parametrize(
-    "value",
-    [
-        "2026-10-21T09:00:00-04:00",
-        "2026-10-21T09:00:00+08:00",
-        "2026-10-21T13:00:00Z",
-        "2026-10-21T09:00:00.123456-04:00",
-        "2026-10-21T09:00:00.1+05:30",
-    ],
-)
-def test_client_now_date_accepts_rfc3339_with_an_offset(value):
-    assert validate_client_now_date(value) == value
+RFC3339_SECONDS = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}")
+
+
+class NoOffset(tzinfo):
+    def utcoffset(self, dt):
+        return None
+
+    def dst(self, dt):
+        return None
+
+
+def assert_now_in(value, zone):
+    assert RFC3339_SECONDS.fullmatch(value)
+    sent = datetime.fromisoformat(value)
+    assert sent.utcoffset() == datetime.now(zone).utcoffset()
+    assert abs((datetime.now(zone) - sent).total_seconds()) < 5
 
 
 @pytest.mark.parametrize(
-    "value",
+    ("timezone", "offset"),
     [
-        "2026-09-18",
-        "2026-10-21T09:00:00",
-        "2026-10-21T09:00:00.123456",
-        "2026-10-21 09:00:00-04:00",
-        "2026-10-21T09:00-04:00",
-        "2026-13-21T09:00:00Z",
-        "2026-10-21T09:00:00+24:00",
-        "2026-10-21T09:00:00z",
-        "",
-        1729501200,
+        ("Asia/Tokyo", "+09:00"),
+        ("Asia/Kolkata", "+05:30"),
+        ("UTC", "+00:00"),
+        (dt_timezone(timedelta(hours=-4)), "-04:00"),
+        (ZoneInfo("Asia/Shanghai"), "+08:00"),
     ],
 )
-def test_client_now_date_refuses_values_the_backend_would_drop(value):
-    with pytest.raises(ValueError, match="client_now_date"):
-        validate_client_now_date(value)
+@pytest.mark.asyncio
+async def test_rest_message_carries_the_current_time_in_the_timezone(timezone, offset):
+    recorder = Recorder()
+    async with async_client(recorder, user_id=PINE_USER_ID) as client:
+        await client.sessions.send_message(7, "hi", timezone=timezone)
+
+    sent = recorder.body()["client_now_date"]
+    assert sent.endswith(offset)
+    assert_now_in(sent, timezone if isinstance(timezone, tzinfo) else ZoneInfo(timezone))
+
+
+def test_daylight_saving_zone_uses_its_current_offset():
+    recorder = Recorder()
+    with PineAI(
+        api_key=API_KEY, user_id=PINE_USER_ID, base_url=BASE_URL, http_transport=httpx.MockTransport(recorder),
+    ) as client:
+        client.sessions.send_message(7, "hi", timezone="America/New_York")
+
+    assert_now_in(recorder.body()["client_now_date"], ZoneInfo("America/New_York"))
 
 
 @pytest.mark.asyncio
-async def test_rest_message_refuses_a_client_now_date_without_offset_before_any_request():
+@pytest.mark.parametrize("timezone", ["Mars/Olympus", "", "../etc/passwd", "EST5EDT/x", 330, NoOffset()])
+async def test_invalid_timezone_is_refused_before_any_request(timezone):
     recorder = Recorder()
     async with async_client(recorder, user_id=PINE_USER_ID) as client:
-        with pytest.raises(ValueError, match="client_now_date"):
-            await client.sessions.send_message(7, "hi", client_now_date="2026-10-21T09:00:00")
+        with pytest.raises(ValueError, match="timezone"):
+            await client.sessions.send_message(7, "hi", timezone=timezone)
 
     assert recorder.requests == []
 
 
 @pytest.mark.asyncio
-async def test_rest_message_omits_client_now_date_when_not_given():
+async def test_rest_message_omits_client_now_date_without_timezone():
     recorder = Recorder()
     async with async_client(recorder, user_id=PINE_USER_ID) as client:
         await client.sessions.send_message(7, "hi")
@@ -341,10 +360,8 @@ async def test_rest_message_omits_client_now_date_when_not_given():
     assert recorder.body() == {"content": "hi"}
 
 
-def test_socketio_message_carries_client_now_date_only_when_given():
+def test_socketio_message_carries_client_now_date_only_with_a_timezone():
     assert ChatEngine._build_message_data("hi") == {"content": "hi", "attachments": [], "referenced_sessions": []}
-    assert ChatEngine._build_message_data("hi", client_now_date="2026-10-21T09:00:00-04:00")["client_now_date"] == (
-        "2026-10-21T09:00:00-04:00"
-    )
-    with pytest.raises(ValueError, match="client_now_date"):
-        ChatEngine._build_message_data("hi", client_now_date="2026-10-21T09:00:00")
+    assert_now_in(ChatEngine._build_message_data("hi", timezone="Asia/Tokyo")["client_now_date"], ZoneInfo("Asia/Tokyo"))
+    with pytest.raises(ValueError, match="timezone"):
+        ChatEngine._build_message_data("hi", timezone="Mars/Olympus")

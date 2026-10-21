@@ -11,10 +11,10 @@ Release candidate for 0.5.0.
 
 To upgrade from 0.5.0rc2:
 
-- If you pass `client_now_date`, make sure that it has a UTC offset, for
-  example `2026-10-21T09:00:00-04:00`. A value without one now raises
-  `ValueError`.
-- Everything else is new. Existing code needs no change.
+- `sessions.send_message()` no longer takes `client_now_date`. Pass the
+  user's time zone as `timezone` instead, for example
+  `timezone="America/New_York"`. The SDK sends the current local time itself.
+- Everything else is new and needs no change to existing code.
 
 `update()`, `assistant`, the identity catalog and the session config need the
 Pine API that supports them. Until it is live, these calls return an error.
@@ -37,21 +37,21 @@ Pine API that supports them. Until it is live, these calls return an error.
   (`GET/PUT /v2/sessions/{id}/config`). Other values raise `ValueError` before
   any request. A 503 `session_config_push_failed` is a `SessionError`; the
   value is saved.
-- `client_now_date` on Socket.IO `chat()` and `send_message()`, and
-  `validate_client_now_date()`.
+- `timezone` on Socket.IO `chat()` and `send_message()`: an IANA time zone
+  name or a `tzinfo`. The message carries the user's current local time.
 - `PineAI` has the same new methods.
 
 ### Changed
 
-- `client_now_date` must be an RFC 3339 time with a UTC offset, such as
-  `2026-10-21T09:00:00-04:00`, on REST and Socket.IO. Other values raise
-  `ValueError`; the backend used to drop them and treat the user as UTC.
+- `sessions.send_message()` takes `timezone` in place of `client_now_date`.
+  An unknown time zone raises `ValueError` before any request. On Windows, the
+  SDK now installs `tzdata` for the time zone names.
 
 ### Fixed
 
 - Socket.IO messages no longer send the host's local time without an offset
   as `client_now_date`. The backend could not parse it, so the agent always
-  used UTC. A message now carries `client_now_date` only when you pass it.
+  used UTC. A message now carries the time only when you pass `timezone`.
 
 ## [0.5.0rc2] - 2026-10-19
 

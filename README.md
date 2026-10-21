@@ -120,11 +120,11 @@ All managed users of one partner use that partner's credits. A partner can
 limit the total credits that its managed users use.
 
 The SDK methods for managed users are listed in
-[docs/sdk-api.md](https://github.com/19PINE-AI/pine-assistant-python/blob/v0.5.0rc3/docs/sdk-api.md).
+[docs/sdk-api.md](https://github.com/19PINE-AI/pine-assistant-python/blob/main/docs/sdk-api.md).
 If you do not use Python, see the HTTP API in
-[docs/http-api.md](https://github.com/19PINE-AI/pine-assistant-python/blob/v0.5.0rc3/docs/http-api.md)
+[docs/http-api.md](https://github.com/19PINE-AI/pine-assistant-python/blob/main/docs/http-api.md)
 and the Socket.IO reference in
-[docs/socketio.md](https://github.com/19PINE-AI/pine-assistant-python/blob/v0.5.0rc3/docs/socketio.md).
+[docs/socketio.md](https://github.com/19PINE-AI/pine-assistant-python/blob/main/docs/socketio.md).
 
 Create the managed user once, and store its `id` in your own user table. The
 call is idempotent per `external_id`: a repeat returns the stored user

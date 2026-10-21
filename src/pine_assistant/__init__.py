@@ -43,7 +43,7 @@ from pine_assistant.platform_api import (
     validate_external_id,
     validate_user_id,
 )
-from pine_assistant.sessions import SessionsAPI, SyncSessionsAPI, validate_client_now_date
+from pine_assistant.sessions import SessionsAPI, SyncSessionsAPI
 from pine_assistant.transport.http import API_KEY_PREFIXES, MANAGED_USER_HEADER
 
 __version__ = "0.5.0rc3"
@@ -68,7 +68,6 @@ __all__ = [
     "MANAGED_USER_HEADER",
     "validate_external_id",
     "validate_user_id",
-    "validate_client_now_date",
     "AuthIdentity",
     "AuthTicket",
     "RedeemedTicket",
