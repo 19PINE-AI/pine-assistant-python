@@ -51,7 +51,7 @@ async with AsyncPineAI(api_key=key, user_id=user.id) as client:
 `ManagedUser` has `id`, `external_id`, `email`, `name`, `phone`, `assistant`
 and `created_at`. Pass `id` as `user_id`. `assistant` is a
 `ManagedUserAssistant` with `identity_id` and `name`, or `None` when the user
-has no assistant.
+uses Pine's default assistant.
 
 ### Change a managed user
 
@@ -71,9 +71,13 @@ user = await partner_client.platform.managed_users.update("usr_42", phone="")
 
 ### Assistant identity
 
-The assistant identity sets the assistant's voice and its default name. Each
-user can have one assistant. Without one, the user has no assistant, as
-before.
+The assistant is the voice of Pine on the phone. It places calls for the
+user, for example to a business, and it answers calls for the user. Each
+user has one assistant. By default, it is Pine's built-in assistant.
+
+You can choose another identity from the catalog. The identity sets the
+assistant's voice and the name that it gives on calls. You can also give it
+your own name.
 
 1. Read the catalog with `settings.assistant_identities()`. A partner
    client reads it without a user. Use only an identity whose `status` is
@@ -116,7 +120,7 @@ user = await partner_client.platform.managed_users.update(
 | `sessions.get(session_id)` | `SessionInfo` |
 | `sessions.get_config(session_id)` | `SessionConfig` |
 | `sessions.update_config(session_id, *, caller_id)` | `SessionConfig` after the change |
-| `sessions.send_message(session_id, content, ..., timezone=None)` | `SessionMessageStatus` |
+| `sessions.send_message(session_id, content, ..., client_now_date=None)` | `SessionMessageStatus` |
 | `sessions.history(session_id, *, limit=30, before_message_id=None)` | `SessionHistoryPage`: one page of stored messages, newest first |
 | `sessions.start_task(session_id)` | `dict` |
 | `sessions.stop_task(session_id)` | `dict` |
@@ -167,21 +171,25 @@ await client.sessions.send_message(session["id"], "Call the clinic to book a vis
 ### The user's time
 
 The agent must know the user's time zone to understand words such as
-"tomorrow at 9 am". Pass the user's time zone as `timezone` with each
-message. The SDK then sends the user's current local time with the message,
-as the Pine app does.
+"tomorrow at 9 am". Send the user's current local time, with its UTC offset,
+as `client_now_date` with each message. The Pine app does the same.
 
-- `timezone` is an IANA time zone name, such as `"America/New_York"`, or a
-  `tzinfo`. Daylight saving time is handled for you.
-- An unknown name raises `ValueError` before any request is sent.
-- If a session never got a time zone, the agent uses UTC. After one message
-  with it, the agent keeps that time zone until a message brings a new one.
+- The value is an RFC 3339 time with an offset, for example
+  `2026-10-21T09:00:00-04:00`. Pine uses only the offset.
+- A value without an offset raises `ValueError` before any request is sent.
+- If a session never got `client_now_date`, the agent uses UTC. After one
+  message with it, the agent keeps that offset until a message brings a new
+  one.
 
 ```python
-await client.sessions.send_message(session_id, "Book a table for tomorrow at 7 pm", timezone="America/New_York")
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+now = datetime.now(ZoneInfo("America/New_York")).isoformat(timespec="seconds")
+await client.sessions.send_message(session_id, "Book a table for tomorrow at 7 pm", client_now_date=now)
 ```
 
-`chat()` and `send_message()` on Socket.IO take the same `timezone`.
+`chat()` and `send_message()` on Socket.IO take the same `client_now_date`.
 
 ### Real time (`AsyncPineAI` only)
 
@@ -254,5 +262,6 @@ Error messages never contain the key, the `external_id` or the user ID.
 |---|---|
 | `validate_user_id(value)` | Checks the form of a managed user's `id`. |
 | `validate_external_id(value)` | Checks the form of an `external_id`. |
+| `validate_client_now_date(value)` | Checks that a `client_now_date` has a UTC offset. |
 | `API_KEY_PREFIXES` | The prefixes that a valid key starts with. |
 | `MANAGED_USER_HEADER` | `"Pine-Managed-User-Id"` |

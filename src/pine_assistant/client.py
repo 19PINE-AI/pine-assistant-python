@@ -7,7 +7,6 @@ import logging
 import os
 import uuid
 from collections.abc import AsyncGenerator, Callable
-from datetime import tzinfo
 from pathlib import Path
 from typing import Any
 
@@ -363,7 +362,7 @@ class AsyncPineAI:
         *,
         attachments: list[dict[str, Any]] | None = None,
         referenced_sessions: list[dict[str, str]] | None = None,
-        timezone: str | tzinfo | None = None,
+        client_now_date: str | None = None,
         turn_timeout: float | None = None,
     ) -> AsyncGenerator[ChatEvent, None]:
         """Send a message and yield the events that follow.
@@ -371,8 +370,8 @@ class AsyncPineAI:
         Events the SDK does not recognise are yielded unchanged alongside the
         rest; ignore what you do not handle.
 
-        `timezone` is the user's time zone, an IANA name or a `tzinfo`. The
-        message then carries the user's current local time.
+        `client_now_date` is the user's current local time with its UTC
+        offset; see :func:`pine_assistant.validate_client_now_date`.
 
         `turn_timeout` bounds the call in wall-clock seconds, keeping whatever
         arrived before it elapsed. Without one, a turn the session never closes
@@ -383,7 +382,7 @@ class AsyncPineAI:
             session_id, content,
             attachments=attachments,
             referenced_sessions=referenced_sessions,
-            timezone=timezone,
+            client_now_date=client_now_date,
             turn_timeout=turn_timeout,
         ):
             yield event
@@ -395,7 +394,7 @@ class AsyncPineAI:
         *,
         attachments: list[dict[str, Any]] | None = None,
         referenced_sessions: list[dict[str, str]] | None = None,
-        timezone: str | tzinfo | None = None,
+        client_now_date: str | None = None,
     ) -> None:
         """Send a message without waiting for events (fire-and-forget)."""
         self._ensure_connected()
@@ -403,7 +402,7 @@ class AsyncPineAI:
             session_id, content,
             attachments=attachments,
             referenced_sessions=referenced_sessions,
-            timezone=timezone,
+            client_now_date=client_now_date,
         )
 
     async def listen(

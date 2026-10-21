@@ -56,7 +56,7 @@ you send are different.
 The response `data` is the managed user:
 `{"id", "external_id", "email", "name", "phone", "assistant", "created_at"}`.
 `phone` is `null` when the user has no phone. `assistant` is
-`{"identity_id", "name"}`, or `null` when the user has no assistant.
+`{"identity_id", "name"}`, or `null` when the user uses Pine's default assistant.
 
 Errors: 400 `invalid_request`, 401 `unauthorized`, 403
 `platform_access_suspended`, 409 `platform_managed_user_limit_reached`.
@@ -93,8 +93,15 @@ Errors: 400 `invalid_request` (nothing is changed), 401 `unauthorized`, 403
 
 ### Assistant identity
 
-The assistant identity sets the assistant's voice and its default name. Read
-the identities from the catalog:
+The assistant is the voice of Pine on the phone. It places calls for the
+user, for example to a business, and it answers calls for the user. Each
+user has one assistant. By default, it is Pine's built-in assistant.
+
+You can choose another identity from the catalog. The identity sets the
+assistant's voice and the name that it gives on calls. You can also give it
+your own name.
+
+The catalog:
 
 `GET /v2/app/settings/assistance_identities?identities=catalog`
 
@@ -111,7 +118,7 @@ its `greeting_audio_url`.
 
 The `name` has at most 100 characters. It can contain only letters (CJK
 included) and spaces between words. One word is enough. A user created
-without `assistant` has no assistant.
+without `assistant` uses Pine's default assistant.
 
 ### Act for a managed user
 

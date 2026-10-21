@@ -9,49 +9,40 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 Release candidate for 0.5.0.
 
-To upgrade from 0.5.0rc2:
+### Upgrade from 0.5.0rc2
 
-- `sessions.send_message()` no longer takes `client_now_date`. Pass the
-  user's time zone as `timezone` instead, for example
-  `timezone="America/New_York"`. The SDK sends the current local time itself.
-- Everything else is new and needs no change to existing code.
+`client_now_date` must now have a UTC offset, such as
+`2026-10-21T09:00:00-04:00`. A value without one raises `ValueError`. Pine
+ignored such values before.
 
-`update()`, `assistant`, the identity catalog and the session config need the
-Pine API that supports them. Until it is live, these calls return an error.
+### New
 
-### Added
-
-- `platform.managed_users.update(external_id, *, email, name, phone, assistant)`
-  (`PATCH /platform/v1/managed-users/{external_id}`). Only the given arguments
-  are sent; `phone=""` removes the phone. Errors raise `PlatformError`.
-- `assistant` on `managed_users.create()` and `update()`: a `dict` with
-  `identity_id`, `name` or both. Other keys or non-string values raise
-  `ValueError` before any request. `ManagedUser.assistant` is a
-  `ManagedUserAssistant` or `None`, and also `None` when the backend does not
-  send it.
-- `settings.assistant_identities()` returns the `AssistantIdentityCatalog`
-  from `GET /v2/app/settings/assistance_identities?identities=catalog`. A
-  client with `api_key` alone reads it anonymously.
-- `sessions.get_config()` and `sessions.update_config(caller_id=...)` read and
-  set the session's caller ID, `"user"` or `"platform"`
-  (`GET/PUT /v2/sessions/{id}/config`). Other values raise `ValueError` before
-  any request. A 503 `session_config_push_failed` is a `SessionError`; the
-  value is saved.
-- `timezone` on Socket.IO `chat()` and `send_message()`: an IANA time zone
-  name or a `tzinfo`. The message carries the user's current local time.
-- `PineAI` has the same new methods.
-
-### Changed
-
-- `sessions.send_message()` takes `timezone` in place of `client_now_date`.
-  An unknown time zone raises `ValueError` before any request. On Windows, the
-  SDK now installs `tzdata` for the time zone names.
+- **Update a managed user.** `platform.managed_users.update()` changes the
+  email, name, phone or assistant. `phone=""` removes the phone.
+- **Choose the assistant.** The assistant places and answers phone calls for
+  the user. Before, every managed user had Pine's built-in assistant. Now you
+  can choose its identity (voice and name) from
+  `settings.assistant_identities()` and rename it, with `assistant=` on
+  `create()` or `update()`.
+- **Choose the caller ID.** `sessions.update_config(caller_id="platform")`
+  makes calls show a platform number instead of the user's phone.
+- **Time zone on Socket.IO.** `chat()` and `send_message()` take
+  `client_now_date`, as REST `send_message()` does.
 
 ### Fixed
 
-- Socket.IO messages no longer send the host's local time without an offset
-  as `client_now_date`. The backend could not parse it, so the agent always
-  used UTC. A message now carries the time only when you pass `timezone`.
+- Socket.IO messages sent a time without a UTC offset, so the agent always
+  used UTC.
+
+### Smaller changes
+
+- `ManagedUser.assistant` is `{identity_id, name}`, or `None` for Pine's
+  default assistant.
+- `assistant={"identity_id": ...}` alone also replaces a custom name.
+- `sessions.get_config()` reads the caller ID.
+- An invalid `assistant`, `caller_id` or `client_now_date` raises `ValueError`
+  before any request.
+- `PineAI` has the same new REST methods.
 
 ## [0.5.0rc2] - 2026-10-19
 
