@@ -2,9 +2,11 @@
 Session models — the REST session object.
 """
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, field_validator
+
+CallerID = Literal["user", "platform"]
 
 
 class SessionInfo(BaseModel):
@@ -30,6 +32,14 @@ class SessionInfo(BaseModel):
         if not value.isdecimal() or int(value) <= 0:
             raise ValueError("id must be a positive decimal identifier")
         return value
+
+
+class SessionConfig(BaseModel):
+    """A session's config. ``caller_id`` is ``None`` until set, which acts as ``"user"``."""
+
+    model_config = ConfigDict(extra="allow")
+
+    caller_id: str | None = None
 
 
 class SessionListResponse(BaseModel):

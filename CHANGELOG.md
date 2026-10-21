@@ -5,6 +5,54 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0rc3] - 2026-10-21
+
+Release candidate for 0.5.0.
+
+To upgrade from 0.5.0rc2:
+
+- If you pass `client_now_date`, make sure that it has a UTC offset, for
+  example `2026-10-21T09:00:00-04:00`. A value without one now raises
+  `ValueError`.
+- Everything else is new. Existing code needs no change.
+
+`update()`, `assistant`, the identity catalog and the session config need the
+Pine API that supports them. Until it is live, these calls return an error.
+
+### Added
+
+- `platform.managed_users.update(external_id, *, email, name, phone, assistant)`
+  (`PATCH /platform/v1/managed-users/{external_id}`). Only the given arguments
+  are sent; `phone=""` removes the phone. Errors raise `PlatformError`.
+- `assistant` on `managed_users.create()` and `update()`: a `dict` with
+  `identity_id`, `name` or both. Other keys or non-string values raise
+  `ValueError` before any request. `ManagedUser.assistant` is a
+  `ManagedUserAssistant` or `None`, and also `None` when the backend does not
+  send it.
+- `app_settings.assistant_identities()` returns the `AssistantIdentityCatalog`
+  from `GET /v2/app/settings/assistance_identities?identities=catalog`. A
+  client with `api_key` alone reads it anonymously.
+- `sessions.get_config()` and `sessions.update_config(caller_id=...)` read and
+  set the session's caller ID, `"user"` or `"platform"`
+  (`GET/PUT /v2/sessions/{id}/config`). Other values raise `ValueError` before
+  any request. A 503 `session_config_push_failed` is a `SessionError`; the
+  value is saved.
+- `client_now_date` on Socket.IO `chat()` and `send_message()`, and
+  `validate_client_now_date()`.
+- `PineAI` has the same new methods.
+
+### Changed
+
+- `client_now_date` must be an RFC 3339 time with a UTC offset, such as
+  `2026-10-21T09:00:00-04:00`, on REST and Socket.IO. Other values raise
+  `ValueError`; the backend used to drop them and treat the user as UTC.
+
+### Fixed
+
+- Socket.IO messages no longer send the host's local time without an offset
+  as `client_now_date`. The backend could not parse it, so the agent always
+  used UTC. A message now carries `client_now_date` only when you pass it.
+
 ## [0.5.0rc2] - 2026-10-19
 
 Internal release candidate for 0.5.0.

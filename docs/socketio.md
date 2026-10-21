@@ -48,7 +48,7 @@ replies with `session:error` and does not process the event.
 | `session:leave` | client → server | `null` | Leave a session. |
 | `session:history` | both | request: `{"max_messages", "max_bytes", "order", "from_message_id"}` | Read stored messages. The reply has `messages` and `next_message_id`. |
 | `session:messages_since` | both | request: `{"since_revision", "limit"}` | Read the changes after a revision. See "Handle a disconnect". |
-| `session:message` | client → server | `{"content": "...", "attachments": []}` | Send a message. |
+| `session:message` | client → server | `{"content": "...", "attachments": [], "client_now_date": "2026-10-21T09:00:00-04:00"}` | Send a message. `client_now_date` is optional: the user's local time with its UTC offset. See "The user's time" in [docs/http-api.md](http-api.md#the-users-time). |
 | `session:message_status` | server → client | `{"status", "message_id", "request_id"}` | Report the state of a message: `received`, `delivered` or a failure. |
 | `session:form_to_user` | server → client | `{"form": ...}` | The agent asks the user to fill in a form. |
 | `session:form_to_user` | client → server | `{"content": {...}}` | Reply to a form. Set `payload.message_id` and `metadata.request_id` to the values of the form. |

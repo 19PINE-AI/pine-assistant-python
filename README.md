@@ -120,15 +120,18 @@ All managed users of one partner use that partner's credits. A partner can
 limit the total credits that its managed users use.
 
 The SDK methods for managed users are listed in
-[docs/sdk-api.md](docs/sdk-api.md). If you do not use Python, see the HTTP API
-in [docs/http-api.md](docs/http-api.md) and the Socket.IO reference in
-[docs/socketio.md](docs/socketio.md).
+[docs/sdk-api.md](https://github.com/19PINE-AI/pine-assistant-python/blob/v0.5.0rc3/docs/sdk-api.md).
+If you do not use Python, see the HTTP API in
+[docs/http-api.md](https://github.com/19PINE-AI/pine-assistant-python/blob/v0.5.0rc3/docs/http-api.md)
+and the Socket.IO reference in
+[docs/socketio.md](https://github.com/19PINE-AI/pine-assistant-python/blob/v0.5.0rc3/docs/socketio.md).
 
 Create the managed user once, and store its `id` in your own user table. The
 call is idempotent per `external_id`: a repeat returns the stored user
 unchanged, even if the profile you send differs. `phone` is optional, in E.164
 form, and must be a number you have verified. `get()` finds a user by
-`external_id` if you did not store the `id`.
+`external_id` if you did not store the `id`. `update()` changes only the
+fields you give; `phone=""` removes the phone.
 
 ```python
 import os
@@ -145,6 +148,7 @@ async with AsyncPineAI(api_key=api_key) as partner_client:
         phone="+14155550100",
     )
     same_user = await partner_client.platform.managed_users.get("usr_01J9Z3K8QF")
+    moved_user = await partner_client.platform.managed_users.update("usr_01J9Z3K8QF", phone="+14155550123")
 # Save user.id with your own user record.
 ```
 
@@ -174,7 +178,8 @@ A key client keeps its key; use a separate client for a user token.
 
 Every error below is a `PineAIError` with `code` and `status_code`, so catch
 `PineAIError`. Some methods raise a subclass: `SessionError` from
-`sessions.list`, `get`, `send_message`, `history` and `outcomes`, and
+`sessions.list`, `get`, `get_config`, `update_config`, `send_message`,
+`history` and `outcomes`, and
 `AuthError` from `auth.*`. Other `sessions` methods, such as `create` and
 `start_task`, raise `PineAIError` itself.
 
@@ -418,8 +423,11 @@ Two conditions have no remedy once a session is running:
 
 - **Metered billing.** The account must be billed against a credit balance. On
   the alternative path a session halts at a payment step the SDK cannot answer.
-- **Phone verification.** Must be completed at provisioning time. It has no
-  in-session remedy and no in-session signal.
+- **Phone verification.** A Pine user account must verify its phone at
+  provisioning time. It has no in-session remedy and no in-session signal. A
+  managed user needs no verification: its phone is the one the partner gives.
+  Without a phone, the agent still places calls, from a number of the
+  platform's pool.
 
 ## Attachments
 

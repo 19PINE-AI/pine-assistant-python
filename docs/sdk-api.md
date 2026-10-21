@@ -43,11 +43,62 @@ async with AsyncPineAI(api_key=key, user_id=user.id) as client:
 
 | Method | Returns |
 |---|---|
-| `platform.managed_users.create(external_id, *, email, name, phone=None)` | `ManagedUser`. Idempotent per `external_id`: a repeat returns the stored user unchanged. |
+| `platform.managed_users.create(external_id, *, email, name, phone=None, assistant=None)` | `ManagedUser`. Idempotent per `external_id`: a repeat returns the stored user unchanged. |
 | `platform.managed_users.get(external_id)` | `ManagedUser` |
+| `platform.managed_users.update(external_id, *, email=None, name=None, phone=None, assistant=None)` | `ManagedUser` after the change. |
+| `app_settings.assistant_identities()` | `AssistantIdentityCatalog`: the identities to choose an assistant from. |
 
-`ManagedUser` has `id`, `external_id`, `email`, `name`, `phone` and
-`created_at`. Pass `id` as `user_id`.
+`ManagedUser` has `id`, `external_id`, `email`, `name`, `phone`, `assistant`
+and `created_at`. Pass `id` as `user_id`. `assistant` is a
+`ManagedUserAssistant` with `identity_id` and `name`, or `None` when the user
+has no assistant.
+
+### Change a managed user
+
+`update()` changes only the arguments that you give. An argument that is
+`None` is not sent, and its stored value does not change.
+
+- `phone=""` removes the phone. Any other phone must be in E.164 form.
+- `external_id` cannot change.
+- With no arguments, `update()` changes nothing and returns the stored user.
+- The agent uses the new profile from the user's next message. A call in
+  progress does not change.
+
+```python
+user = await partner_client.platform.managed_users.update("usr_42", phone="+14155550123")
+user = await partner_client.platform.managed_users.update("usr_42", phone="")
+```
+
+### Assistant identity
+
+The assistant identity sets the assistant's voice and its default name. Each
+user can have one assistant. Without one, the user has no assistant, as
+before.
+
+1. Read the catalog with `app_settings.assistant_identities()`. A partner
+   client reads it without a user. Use only an identity whose `status` is
+   `"active"`. To hear an identity, play its `greeting_audio_url`.
+2. Pass `assistant` to `create()` or `update()` as a `dict` with
+   `identity_id`, `name` or both:
+
+| `assistant` | Result |
+|---|---|
+| `{"identity_id": "agt_..."}` | The assistant gets the identity and the identity's own name. |
+| `{"identity_id": "agt_...", "name": "Zoe Park"}` | The assistant gets the identity and this name. |
+| `{"name": "Zoe Park"}` | `update()` only: the current identity gets a new name. A user with no identity gets 400. |
+
+The `name` has at most 100 characters. It can contain only letters (CJK
+included) and spaces between words. One word is enough. A `dict` with other
+keys or with values that are not strings raises `ValueError` before any
+request is sent.
+
+```python
+catalog = await partner_client.app_settings.assistant_identities()
+identity = next(item for item in catalog.identities if item.status == "active")
+user = await partner_client.platform.managed_users.update(
+    "usr_42", assistant={"identity_id": identity.id, "name": "Zoe Park"},
+)
+```
 
 > **Caution:** use only the end user's own email address and phone number, and
 > verify them first. Never use an email address or phone number that does not
@@ -63,7 +114,9 @@ async with AsyncPineAI(api_key=key, user_id=user.id) as client:
 | `sessions.create()` | the new session (`dict`) |
 | `sessions.list(...)` | `SessionListResponse` |
 | `sessions.get(session_id)` | `SessionInfo` |
-| `sessions.send_message(session_id, content, ...)` | `SessionMessageStatus` |
+| `sessions.get_config(session_id)` | `SessionConfig` |
+| `sessions.update_config(session_id, *, caller_id)` | `SessionConfig` after the change |
+| `sessions.send_message(session_id, content, ..., client_now_date=None)` | `SessionMessageStatus` |
 | `sessions.history(session_id, *, limit=30, before_message_id=None)` | `SessionHistoryPage`: one page of stored messages, newest first |
 | `sessions.start_task(session_id)` | `dict` |
 | `sessions.stop_task(session_id)` | `dict` |
@@ -82,8 +135,66 @@ with `sessions.history()`. Each message has `message_id`, `type`, `version`,
 `data` (a JSON string) and `created_at`. To read older messages, pass
 `next_message_id` as `before_message_id`. When `next_message_id` is `None`,
 there are no older messages.
-A new reply can take a few seconds to appear in this list. If the `state`
-changed but the reply is missing, read again.
+A reply appears in this list only after the agent finishes it. This can take
+a minute or more. Socket.IO shows the reply at once. If the `state` changed
+but the reply is missing, read again later.
+
+### Caller ID
+
+When the agent calls a third party, such as a business, the call shows a
+caller ID. `caller_id` is a session setting that selects it:
+
+| `caller_id` | The call shows |
+|---|---|
+| `"user"` (the default) | The assistant's number if it has one, then the user's phone, then a number of the platform's pool. |
+| `"platform"` | Always a number of the platform's pool. |
+
+- Set it after `sessions.create()` and before the first message. Then the
+  first call already uses it.
+- You can change it while a task runs. The agent uses the new value for its
+  next call. A call in progress does not change.
+- It cannot be removed. Set `"user"` to go back to the default.
+- `caller_id` does not change how the agent reaches the user. The agent still
+  uses the user's phone for that.
+- A 503 `session_config_push_failed` means that the value is saved, but the
+  running agent did not get it yet. Send the same value again.
+- Any other value raises `ValueError` before any request is sent.
+
+```python
+session = await client.sessions.create()
+await client.sessions.update_config(session["id"], caller_id="platform")
+await client.sessions.send_message(session["id"], "Call the clinic to book a visit")
+```
+
+> **Caution:** with `"user"`, a call can show the user's own phone. Carriers
+> check caller IDs (STIR/SHAKEN). A number that does not belong to Pine gets a
+> lower level of trust (B or C). The person who is called can see it as
+> suspicious, or not answer. Some lines cannot show the user's number. A retry
+> of a call can show a number of the platform's pool. You are responsible
+> for the phone numbers you give for your users.
+
+### The user's time
+
+The agent must know the user's time zone to understand words such as
+"tomorrow at 9 am". Send the user's current local time, with its UTC offset,
+as `client_now_date` with each message. The Pine app does the same.
+
+- The value is an RFC 3339 time with an offset, for example
+  `2026-10-21T09:00:00-04:00`. Pine uses only the offset.
+- A value without an offset raises `ValueError` before any request is sent.
+- If a session never got `client_now_date`, the agent uses UTC. After one
+  message with it, the agent keeps that offset until a message brings a new
+  one.
+
+```python
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+now = datetime.now(ZoneInfo("America/New_York")).isoformat(timespec="seconds")
+await client.sessions.send_message(session_id, "Book a table for tomorrow at 7 pm", client_now_date=now)
+```
+
+`chat()` and `send_message()` on Socket.IO take the same `client_now_date`.
 
 ### Real time (`AsyncPineAI` only)
 
@@ -129,8 +240,23 @@ if event.type == "session:form_to_user":
 
 Every error from the server is a `PineAIError` with `code` and `status_code`.
 Some methods raise a subclass: `PlatformError` from `platform.*`, `AuthError`
-from `auth.*`, and `SessionError` from `sessions.list`, `get`,
-`send_message`, `history` and `outcomes`. `connect()` raises `ConnectionError`.
+from `auth.*`, and `SessionError` from `sessions.list`, `get`, `get_config`,
+`update_config`, `send_message`, `history` and `outcomes`. `connect()` raises
+`ConnectionError`.
+
+`PlatformError` from `platform.managed_users.update()`:
+
+| Status | Code | Cause |
+|---|---|---|
+| 400 | `invalid_request` | A value is not valid. For example: the phone is not E.164, the identity is unknown or not active, or a name is sent for a user with no identity. Nothing is changed. |
+| 401 | `unauthorized` | The key is unknown or revoked. |
+| 403 | `platform_access_suspended` | Your access is suspended. |
+| 404 | `platform_managed_user_not_found` | No managed user of yours has this `external_id`. |
+| 429 | `too_many_requests` | Too many requests. |
+
+`SessionError` from `sessions.get_config()` and `update_config()`: 403
+`forbidden` for a client that is not a managed user, and 503
+`session_config_push_failed` (see "Caller ID").
 
 The codes for managed users are listed in [docs/http-api.md](http-api.md).
 Error messages never contain the key, the `external_id` or the user ID.
@@ -141,5 +267,6 @@ Error messages never contain the key, the `external_id` or the user ID.
 |---|---|
 | `validate_user_id(value)` | Checks the form of a managed user's `id`. |
 | `validate_external_id(value)` | Checks the form of an `external_id`. |
+| `validate_client_now_date(value)` | Checks that a `client_now_date` has a UTC offset. |
 | `API_KEY_PREFIXES` | The prefixes that a valid key starts with. |
 | `MANAGED_USER_HEADER` | `"Pine-Managed-User-Id"` |

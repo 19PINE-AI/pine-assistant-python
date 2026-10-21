@@ -108,6 +108,10 @@ class _RequestIdentity:
         self._api_key = api_key
         self._managed_user_id = managed_user_id
 
+    @property
+    def key_only(self) -> bool:
+        return self._api_key is not None and self._managed_user_id is None
+
     def ensure_token_can_change(self) -> None:
         if self._api_key is not None:
             raise ValueError(FIXED_KEY_MESSAGE)
@@ -224,6 +228,9 @@ class HttpClient(_RequestIdentity):
                   *, token: str | None = None) -> Any:
         return await self._request("PUT", path, body=body, authenticated=authenticated, token=token)
 
+    async def patch(self, path: str, body: dict[str, Any] | None = None, *, as_partner: bool = False) -> Any:
+        return await self._request("PATCH", path, body=body, as_partner=as_partner)
+
     async def delete(self, path: str, params: dict[str, str | int] | None = None, authenticated: bool = True,
                      *, token: str | None = None) -> Any:
         return await self._request("DELETE", path, params=params, authenticated=authenticated, token=token)
@@ -318,6 +325,9 @@ class SyncHttpClient(_RequestIdentity):
     def put(self, path: str, body: dict[str, Any] | None = None, authenticated: bool = True,
             *, token: str | None = None) -> Any:
         return self._request("PUT", path, body=body, authenticated=authenticated, token=token)
+
+    def patch(self, path: str, body: dict[str, Any] | None = None, *, as_partner: bool = False) -> Any:
+        return self._request("PATCH", path, body=body, as_partner=as_partner)
 
     def delete(self, path: str, params: dict[str, str | int] | None = None, authenticated: bool = True,
                *, token: str | None = None) -> Any:
