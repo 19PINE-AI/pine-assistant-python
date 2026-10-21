@@ -184,12 +184,13 @@ class SessionsAPI:
     async def update_config(self, session_id: str | int, *, caller_id: CallerID) -> SessionConfig:
         """Set the caller ID of the calls the agent places in this session.
 
-        ``"user"`` (the default) presents the assistant's number, then the
-        user's phone, then a platform number; ``"platform"`` always presents a
-        number of the platform's pool. Set it before the first message, or
-        any time later: a running agent gets it before its next call. A 503
-        ``session_config_push_failed`` means the value is saved but has not
-        reached the running agent yet; send the same value again.
+        ``"user"``, or not set, presents the user's assistant number if it has
+        one, else the user's phone, else a number of the platform's pool;
+        ``"platform"`` presents a number of the platform's pool. Set it before
+        the first message, or any time later: a running agent gets it before
+        its next call. A 503 ``session_config_push_failed`` means the value is
+        saved but has not reached the running agent yet; send the same value
+        again.
         """
         body = {"caller_id": _caller_id(caller_id)}
         try:

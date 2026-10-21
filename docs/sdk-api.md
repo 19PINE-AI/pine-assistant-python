@@ -146,14 +146,12 @@ caller ID. `caller_id` is a session setting that selects it:
 
 | `caller_id` | The call shows |
 |---|---|
-| `"user"` (the default) | The assistant's number if it has one, then the user's phone, then a number of the platform's pool. |
-| `"platform"` | Always a number of the platform's pool. |
+| `"user"`, or not set | The user's assistant number if it has one, else the user's phone, else a number of the platform's pool. |
+| `"platform"` | A number of the platform's pool. |
 
-- Set it after `sessions.create()` and before the first message. Then the
-  first call already uses it.
+- Set it after `sessions.create()` and before the first message.
 - You can change it while a task runs. The agent uses the new value for its
   next call. A call in progress does not change.
-- It cannot be removed. Set `"user"` to go back to the default.
 - `caller_id` does not change how the agent reaches the user. The agent still
   uses the user's phone for that.
 - A 503 `session_config_push_failed` means that the value is saved, but the
@@ -166,12 +164,13 @@ await client.sessions.update_config(session["id"], caller_id="platform")
 await client.sessions.send_message(session["id"], "Call the clinic to book a visit")
 ```
 
-> **Caution:** with `"user"`, a call can show the user's own phone. Carriers
-> check caller IDs (STIR/SHAKEN). A number that does not belong to Pine gets a
-> lower level of trust (B or C). The person who is called can see it as
-> suspicious, or not answer. Some lines cannot show the user's number. A retry
-> of a call can show a number of the platform's pool. You are responsible
-> for the phone numbers you give for your users.
+> **Caution:** carriers rate each caller ID (STIR/SHAKEN). The rating depends
+> on whether the carrier that places the call owns the number. So a call can
+> get a lower rating (B or C) with any caller ID, most often with the user's
+> phone. The person who is called can then see the call as suspicious, or not
+> answer. Some lines cannot show the user's phone, and a retry of a call can
+> show a number of the platform's pool. You are responsible for the phone
+> numbers you give for your users.
 
 ### The user's time
 
