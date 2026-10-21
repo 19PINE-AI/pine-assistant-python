@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0rc3] - 2026-10-21
+
+Release candidate for 0.5.0.
+
+### Upgrade from 0.5.0rc2
+
+`client_now_date` must now have a UTC offset, such as
+`2026-10-21T09:00:00-04:00`. A value without one raises `ValueError`. Pine
+ignored such values before.
+
+### New
+
+- **Update a managed user.** `platform.managed_users.update()` changes the
+  email, name, phone or assistant. `phone=""` removes the phone.
+- **Choose the assistant.** The assistant places and answers phone calls for
+  the user. Before, every managed user had Pine's built-in assistant. Now you
+  can choose its identity (voice and name) from
+  `settings.assistant_identities()` and rename it, with `assistant=` on
+  `create()` or `update()`.
+- **Choose the caller ID.** `sessions.update_config(caller_id="platform")`
+  makes calls show a platform number instead of the user's phone.
+- **Time zone on Socket.IO.** `chat()` and `send_message()` take
+  `client_now_date`, as REST `send_message()` does.
+
+### Fixed
+
+- Socket.IO messages sent a time without a UTC offset, so the agent always
+  used UTC.
+
+### Smaller changes
+
+- `ManagedUser.assistant` is `{identity_id, name}`, or `None` for Pine's
+  default assistant.
+- `assistant={"identity_id": ...}` alone also replaces a custom name.
+- `sessions.get_config()` reads the caller ID.
+- An invalid `assistant`, `caller_id` or `client_now_date` raises `ValueError`
+  before any request.
+- `PineAI` has the same new REST methods.
+
 ## [0.5.0rc2] - 2026-10-19
 
 Internal release candidate for 0.5.0.

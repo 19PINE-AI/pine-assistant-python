@@ -4,12 +4,16 @@ Sessions REST API — spec section 4.3.
 
 from __future__ import annotations
 
-from typing import Any
+import re
+from datetime import datetime
+from typing import Any, get_args
 
 from pydantic import ValidationError
 
 from pine_assistant.errors import PineAIError, SessionError
 from pine_assistant.models.session import (
+    CallerID,
+    SessionConfig,
     SessionHistoryPage,
     SessionInfo,
     SessionListResponse,
@@ -17,6 +21,41 @@ from pine_assistant.models.session import (
     SessionOutcomesPage,
 )
 from pine_assistant.transport.http import HttpClient, SyncHttpClient
+
+_CLIENT_NOW_DATE = re.compile(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)")
+
+
+def _is_calendar_time(text: str) -> bool:
+    try:
+        datetime.fromisoformat(text)
+    except ValueError:
+        return False
+    else:
+        return True
+
+
+def validate_client_now_date(value: str | None) -> str | None:
+    """Check the backend's rule: an RFC 3339 time with a UTC offset, such as ``2026-10-21T09:00:00-04:00``.
+
+    Pine reads only the offset, as the user's time zone. A value without one
+    would be dropped by the backend, so it is refused here.
+    """
+    if value is None:
+        return None
+    match = _CLIENT_NOW_DATE.fullmatch(value) if isinstance(value, str) else None
+    if match is None or not _is_calendar_time(match.group(1)):
+        raise ValueError("client_now_date must be an RFC 3339 time with a UTC offset, such as 2026-10-21T09:00:00-04:00")
+    return value
+
+
+def _caller_id(caller_id: CallerID) -> CallerID:
+    if caller_id not in get_args(CallerID):
+        raise ValueError('caller_id must be "user" or "platform"')
+    return caller_id
+
+
+def _config_path(session_id: str | int) -> str:
+    return f"/v2/sessions/{_session_id(session_id)}/config"
 
 
 def _session_id(session_id: str | int) -> str:
@@ -33,6 +72,13 @@ def _parse_session(payload: Any) -> SessionInfo:
         return SessionInfo.model_validate(payload)
     except ValidationError:
         raise SessionError("Pine API returned an invalid session response", "invalid_response") from None
+
+
+def _parse_session_config(payload: Any) -> SessionConfig:
+    try:
+        return SessionConfig.model_validate(payload)
+    except ValidationError:
+        raise SessionError("Pine API returned an invalid session config response", "invalid_response") from None
 
 
 def _parse_session_list(payload: Any) -> SessionListResponse:
@@ -128,6 +174,29 @@ class SessionsAPI:
         except PineAIError as exc:
             raise SessionError(str(exc), exc.code, status_code=exc.status_code) from exc
 
+    async def get_config(self, session_id: str | int) -> SessionConfig:
+        """Read the session config. Only managed users and test accounts may; others get 403."""
+        try:
+            return _parse_session_config(await self._http.get(_config_path(session_id)))
+        except PineAIError as exc:
+            raise _session_error(exc) from exc
+
+    async def update_config(self, session_id: str | int, *, caller_id: CallerID) -> SessionConfig:
+        """Set the caller ID of the calls the agent places in this session.
+
+        ``"user"``, or not set, presents the user's assistant number if it has
+        one, else the user's phone, else a number of the platform's pool;
+        ``"platform"`` presents a number of the platform's pool. Set it at any
+        time: the agent uses the value for its next call. A 503
+        ``session_config_push_failed`` means the value is saved but has not
+        reached the running agent yet; send the same value again.
+        """
+        body = {"caller_id": _caller_id(caller_id)}
+        try:
+            return _parse_session_config(await self._http.put(_config_path(session_id), body))
+        except PineAIError as exc:
+            raise _session_error(exc) from exc
+
     async def end_task(self, session_id: str | int) -> SessionInfo:
         """Request that an eligible continuous session be closed by its user.
 
@@ -172,7 +241,7 @@ class SessionsAPI:
             "library_artifact_ids": library_artifact_ids,
             "referenced_sessions": referenced_sessions,
             "quote": quote,
-            "client_now_date": client_now_date,
+            "client_now_date": validate_client_now_date(client_now_date),
         }.items():
             if value is not None:
                 body[key] = value
@@ -287,6 +356,19 @@ class SyncSessionsAPI:
         except PineAIError as exc:
             raise SessionError(str(exc), exc.code, status_code=exc.status_code) from exc
 
+    def get_config(self, session_id: str | int) -> SessionConfig:
+        try:
+            return _parse_session_config(self._http.get(_config_path(session_id)))
+        except PineAIError as exc:
+            raise _session_error(exc) from exc
+
+    def update_config(self, session_id: str | int, *, caller_id: CallerID) -> SessionConfig:
+        body = {"caller_id": _caller_id(caller_id)}
+        try:
+            return _parse_session_config(self._http.put(_config_path(session_id), body))
+        except PineAIError as exc:
+            raise _session_error(exc) from exc
+
     def end_task(self, session_id: str | int) -> SessionInfo:
         """Request that an eligible continuous session be closed by its user.
 
@@ -326,7 +408,7 @@ class SyncSessionsAPI:
             "library_artifact_ids": library_artifact_ids,
             "referenced_sessions": referenced_sessions,
             "quote": quote,
-            "client_now_date": client_now_date,
+            "client_now_date": validate_client_now_date(client_now_date),
         }.items():
             if value is not None:
                 body[key] = value

@@ -20,8 +20,10 @@ from pine_assistant.models.events import (
     S2CEvent,
     is_supported_event,
 )
-from pine_assistant.models.platform import ManagedUser
+from pine_assistant.models.platform import ManagedUser, ManagedUserAssistant
 from pine_assistant.models.session import (
+    CallerID,
+    SessionConfig,
     SessionHistoryMessage,
     SessionHistoryPage,
     SessionInfo,
@@ -31,6 +33,7 @@ from pine_assistant.models.session import (
     SessionOutcomeRating,
     SessionOutcomesPage,
 )
+from pine_assistant.models.settings import AssistantIdentity, AssistantIdentityCatalog
 from pine_assistant.platform_api import (
     ManagedUsersAPI,
     PlatformAPI,
@@ -39,10 +42,11 @@ from pine_assistant.platform_api import (
     validate_external_id,
     validate_user_id,
 )
-from pine_assistant.sessions import SessionsAPI, SyncSessionsAPI
+from pine_assistant.sessions import SessionsAPI, SyncSessionsAPI, validate_client_now_date
+from pine_assistant.settings import SettingsAPI, SyncSettingsAPI
 from pine_assistant.transport.http import API_KEY_PREFIXES, MANAGED_USER_HEADER
 
-__version__ = "0.5.0rc2"
+__version__ = "0.5.0rc3"
 __all__ = [
     "PineAI",
     "AsyncPineAI",
@@ -50,19 +54,27 @@ __all__ = [
     "SyncAuth",
     "SessionsAPI",
     "SyncSessionsAPI",
+    "SettingsAPI",
+    "SyncSettingsAPI",
     "PlatformAPI",
     "SyncPlatformAPI",
     "ManagedUsersAPI",
     "SyncManagedUsersAPI",
     "ManagedUser",
+    "ManagedUserAssistant",
+    "AssistantIdentity",
+    "AssistantIdentityCatalog",
     "API_KEY_PREFIXES",
     "MANAGED_USER_HEADER",
     "validate_external_id",
     "validate_user_id",
+    "validate_client_now_date",
     "AuthIdentity",
     "AuthTicket",
     "RedeemedTicket",
     "SessionInfo",
+    "SessionConfig",
+    "CallerID",
     "SessionHistoryMessage",
     "SessionHistoryPage",
     "SessionListResponse",

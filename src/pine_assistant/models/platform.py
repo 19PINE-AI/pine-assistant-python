@@ -5,6 +5,15 @@ from pydantic import BaseModel, ConfigDict, field_validator
 from pine_assistant.models.session import SessionInfo
 
 
+class ManagedUserAssistant(BaseModel):
+    """The managed user's assistant: a catalog identity and the name it uses."""
+
+    model_config = ConfigDict(extra="allow")
+
+    identity_id: str
+    name: str
+
+
 class ManagedUser(BaseModel):
     """One end user of a Platform integration, addressed by its ``external_id``.
 
@@ -20,6 +29,7 @@ class ManagedUser(BaseModel):
     email: str
     name: str
     phone: str | None
+    assistant: ManagedUserAssistant | None = None
     created_at: str
 
     @field_validator("id", mode="before")

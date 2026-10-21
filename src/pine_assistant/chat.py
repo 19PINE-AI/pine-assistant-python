@@ -13,6 +13,7 @@ from typing import Any
 
 from pine_assistant.models.events import C2SEvent, S2CEvent
 from pine_assistant.models.form import FormSubmissionResult
+from pine_assistant.sessions import validate_client_now_date
 from pine_assistant.transport.socketio import SocketIOManager
 
 # States in which nothing further arrives until something changes outside the
@@ -138,14 +139,16 @@ class ChatEngine:
         content: str,
         attachments: list[dict[str, Any]] | None = None,
         referenced_sessions: list[dict[str, str]] | None = None,
+        client_now_date: str | None = None,
     ) -> dict[str, Any]:
-        from datetime import datetime
-        return {
+        data: dict[str, Any] = {
             "content": content,
             "attachments": attachments or [],
             "referenced_sessions": referenced_sessions or [],
-            "client_now_date": datetime.now().isoformat(),
         }
+        if client_now_date is not None:
+            data["client_now_date"] = validate_client_now_date(client_now_date)
+        return data
 
     async def chat(
         self,
@@ -154,12 +157,13 @@ class ChatEngine:
         *,
         attachments: list[dict[str, Any]] | None = None,
         referenced_sessions: list[dict[str, str]] | None = None,
+        client_now_date: str | None = None,
         turn_timeout: float | None = None,
     ) -> AsyncGenerator[ChatEvent, None]:
         """Send a message and yield the events that follow."""
         self._sio.emit(
             C2SEvent.SESSION_MESSAGE,
-            self._build_message_data(content, attachments, referenced_sessions),
+            self._build_message_data(content, attachments, referenced_sessions, client_now_date),
             session_id,
         )
         async for event in self._listen(
@@ -174,11 +178,12 @@ class ChatEngine:
         *,
         attachments: list[dict[str, Any]] | None = None,
         referenced_sessions: list[dict[str, str]] | None = None,
+        client_now_date: str | None = None,
     ) -> None:
         """Fire-and-forget message send (no event listening)."""
         self._sio.emit(
             C2SEvent.SESSION_MESSAGE,
-            self._build_message_data(content, attachments, referenced_sessions),
+            self._build_message_data(content, attachments, referenced_sessions, client_now_date),
             session_id,
         )
 

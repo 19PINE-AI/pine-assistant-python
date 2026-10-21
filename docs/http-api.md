@@ -39,6 +39,9 @@ Use `error.code` in your code. The `message` text can change.
 | `email` | yes | email address |
 | `name` | yes | 1-100 characters |
 | `phone` | no | E.164, for example `+14155550100`; a number you have verified |
+| `assistant` | no | `{"identity_id": "...", "name": "..."}`; see "Assistant identity" |
+
+No value may be `null`: omit a field instead. Unknown fields return 400.
 
 > **Caution:** use only the end user's own email address and phone number, and
 > verify them first. Never use an email address or phone number that does not
@@ -51,8 +54,9 @@ repeated call returns 200 with the stored user unchanged, even if the fields
 you send are different.
 
 The response `data` is the managed user:
-`{"id", "external_id", "email", "name", "phone", "created_at"}`. `phone` is
-`null` when you did not give one.
+`{"id", "external_id", "email", "name", "phone", "assistant", "created_at"}`.
+`phone` is `null` when the user has no phone. `assistant` is
+`{"identity_id", "name"}`, or `null` when the user uses Pine's default assistant.
 
 Errors: 400 `invalid_request`, 401 `unauthorized`, 403
 `platform_access_suspended`, 409 `platform_managed_user_limit_reached`.
@@ -64,6 +68,57 @@ Percent-encode `external_id` in the path (for example `|` is `%7C`).
 
 It returns the same managed user as create. A user that does not exist, or that
 belongs to another partner, returns 404 `platform_managed_user_not_found`.
+
+### Update a managed user
+
+`PATCH /platform/v1/managed-users/{external_id}` with `Authorization: Bearer <key>`.
+
+Send only the fields that you change. A field that you omit keeps its stored
+value. `{}` changes nothing.
+
+| Field | Rule |
+|---|---|
+| `email` | email address |
+| `name` | 1-100 characters |
+| `phone` | E.164, or `""` to remove the phone |
+| `assistant` | `{"identity_id": "...", "name": "..."}`; either member can be omitted; see "Assistant identity" |
+
+The rules for `null` and unknown fields are the same as for create.
+`external_id` cannot change. The agent uses the new profile from the user's
+next message. A call in progress does not change. The response is the same as
+for get.
+
+Errors: 400 `invalid_request` (nothing is changed), 401 `unauthorized`, 403
+`platform_access_suspended`, 404 `platform_managed_user_not_found`.
+
+### Assistant identity
+
+The assistant is the voice of Pine on the phone. It places calls for the
+user, for example to a business, and it answers calls for the user. Each
+user has one assistant. By default, it is Pine's built-in assistant.
+
+You can choose another identity from the catalog. The identity sets the
+assistant's voice and the name that it gives on calls. You can also give it
+your own name.
+
+The catalog:
+
+`GET /v2/app/settings/assistance_identities?identities=catalog`
+
+You can send it without any header. The response `data` is
+`{"version", "identities": [{"id", "first_name", "last_name", "locale", "description", "greeting_audio_url", "status"}]}`.
+Use only an identity whose `status` is `"active"`. To hear an identity, play
+its `greeting_audio_url`.
+
+| `assistant` | Result |
+|---|---|
+| `{"identity_id": "agt_..."}` | The assistant gets the identity and the identity's own name. On update, this also replaces a custom name: to keep it, send `name` too. |
+| `{"identity_id": "agt_...", "name": "Zoe Park"}` | The assistant gets the identity and this name. |
+| `{"name": "Zoe Park"}` | Update only: the current identity gets a new name. A user with no identity gets 400. |
+
+The `name` has at most 100 characters. It can contain only letters (CJK
+included) and spaces between words. One word is enough. A user created
+without `assistant` uses Pine's default assistant.
 
 ### Act for a managed user
 
@@ -97,7 +152,9 @@ These routes take the two headers above.
 | `POST /v2/sessions` | Creates a session. | `sessions.create()` |
 | `GET /v2/sessions` | Lists the user's sessions. | `sessions.list()` |
 | `GET /v2/sessions/{id}` | Returns one session. | `sessions.get()` |
-| `POST /v2/sessions/{id}/messages` | Sends a message. Body: `{"content": "..."}`. | `sessions.send_message()` |
+| `GET /v2/sessions/{id}/config` | Returns the session config, for example `{"caller_id": "platform"}`, or `{}`. | `sessions.get_config()` |
+| `PUT /v2/sessions/{id}/config` | Sets the caller ID. Body: `{"caller_id": "user"}` or `{"caller_id": "platform"}`. See "Caller ID". | `sessions.update_config()` |
+| `POST /v2/sessions/{id}/messages` | Sends a message. Body: `{"content": "...", "client_now_date": "..."}`; `client_now_date` is optional, see "The user's time". | `sessions.send_message()` |
 | `GET /v2/sessions/{id}/messages` | Reads the stored messages, newest first. | `sessions.history()` |
 | `POST /v2/sessions/{id}/start` | Starts a prepared or paused task. | `sessions.start_task()` |
 | `POST /v2/sessions/{id}/stop` | Stops a running task. | `sessions.stop_task()` |
@@ -116,11 +173,45 @@ Routes that make the agent work can also return these errors:
 `type`, `version`, `data` (a JSON string) and `created_at`. To read older
 messages, send the returned `next_message_id` as `before_message_id`. An empty
 `next_message_id` means there are no older messages.
-A new reply can take a few seconds to appear in this list. If the `state`
-changed but the reply is missing, read again.
+A reply appears in this list only after the agent finishes it. This can take
+a minute or more. Socket.IO shows the reply at once. If the `state` changed
+but the reply is missing, read again later.
 
 Other `/v2` routes accept the key and header in the same way. This page does
 not describe them.
+
+### Caller ID
+
+When the agent calls a third party, such as a business, the call shows a
+caller ID. `caller_id` is a session setting that selects it:
+
+| `caller_id` | The call shows |
+|---|---|
+| `"user"`, or not set | The user's assistant number if it has one, else the user's phone, else a number of the platform's pool. |
+| `"platform"` | A number of the platform's pool. |
+
+- Set or change it at any time. The agent uses the value for its next call. A
+  call already placed, including its retries, keeps its caller ID. A change
+  while the session is paused applies when the session resumes.
+- `caller_id` does not change how the agent reaches the user. The agent still
+  uses the user's phone for that.
+- Any other key or value returns 400 `invalid_request`.
+- 503 `session_config_push_failed` means that the value is saved, but the
+  running agent did not get it yet. Send the same request again.
+
+### The user's time
+
+The agent must know the user's time zone to understand words such as
+"tomorrow at 9 am". Send the user's current local time, with its UTC offset,
+as `client_now_date` with each message. The Pine app does the same.
+
+- The value is an RFC 3339 time with an offset, for example
+  `2026-10-21T09:00:00-04:00`. Pine uses only the offset.
+- A value without an offset is ignored.
+- If a session never got `client_now_date`, the agent uses UTC. After one
+  message with it, the agent keeps that offset until a message brings a new
+  one.
+- On Socket.IO, put the same field in the `session:message` data.
 
 ### How a task runs
 
