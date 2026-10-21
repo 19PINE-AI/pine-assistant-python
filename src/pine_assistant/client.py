@@ -13,7 +13,6 @@ from typing import Any
 
 import httpx
 
-from pine_assistant.app_settings import AppSettingsAPI, SyncAppSettingsAPI
 from pine_assistant.auth import Auth, SyncAuth
 from pine_assistant.chat import ChatEngine, ChatEvent, Deduplicator, event_from_envelope
 from pine_assistant.errors import ConnectionError
@@ -21,6 +20,7 @@ from pine_assistant.models.events import C2SEvent
 from pine_assistant.models.form import FormSubmissionResult, FormToUserData, encode_form_answers
 from pine_assistant.platform_api import PlatformAPI, SyncPlatformAPI, validate_user_id
 from pine_assistant.sessions import SessionsAPI, SyncSessionsAPI
+from pine_assistant.settings import SettingsAPI, SyncSettingsAPI
 from pine_assistant.transport.http import (
     API_KEY_PREFIXES,
     DEFAULT_API_BASE_PATH,
@@ -147,7 +147,7 @@ class AsyncPineAI:
         self.auth = Auth(self.http)
         self.sessions = SessionsAPI(self.http)
         self.platform = PlatformAPI(self.http)
-        self.app_settings = AppSettingsAPI(self.http)
+        self.settings = SettingsAPI(self.http)
 
         self._sio: SocketIOManager | None = None
         self._chat: ChatEngine | None = None
@@ -527,7 +527,7 @@ class PineAI:
         self.auth = SyncAuth(self.http)
         self.sessions = SyncSessionsAPI(self.http)
         self.platform = SyncPlatformAPI(self.http)
-        self.app_settings = SyncAppSettingsAPI(self.http)
+        self.settings = SyncSettingsAPI(self.http)
 
     def __enter__(self) -> "PineAI":
         return self

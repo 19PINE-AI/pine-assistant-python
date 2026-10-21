@@ -1,4 +1,4 @@
-"""App settings models — the assistant identity catalog."""
+"""Settings models — the assistant identity catalog."""
 
 from pydantic import BaseModel, ConfigDict
 

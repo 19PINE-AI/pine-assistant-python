@@ -29,7 +29,7 @@ Pine API that supports them. Until it is live, these calls return an error.
   `ValueError` before any request. `ManagedUser.assistant` is a
   `ManagedUserAssistant` or `None`, and also `None` when the backend does not
   send it.
-- `app_settings.assistant_identities()` returns the `AssistantIdentityCatalog`
+- `settings.assistant_identities()` returns the `AssistantIdentityCatalog`
   from `GET /v2/app/settings/assistance_identities?identities=catalog`. A
   client with `api_key` alone reads it anonymously.
 - `sessions.get_config()` and `sessions.update_config(caller_id=...)` read and

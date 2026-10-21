@@ -46,7 +46,7 @@ async with AsyncPineAI(api_key=key, user_id=user.id) as client:
 | `platform.managed_users.create(external_id, *, email, name, phone=None, assistant=None)` | `ManagedUser`. Idempotent per `external_id`: a repeat returns the stored user unchanged. |
 | `platform.managed_users.get(external_id)` | `ManagedUser` |
 | `platform.managed_users.update(external_id, *, email=None, name=None, phone=None, assistant=None)` | `ManagedUser` after the change. |
-| `app_settings.assistant_identities()` | `AssistantIdentityCatalog`: the identities to choose an assistant from. |
+| `settings.assistant_identities()` | `AssistantIdentityCatalog`: the identities to choose an assistant from. |
 
 `ManagedUser` has `id`, `external_id`, `email`, `name`, `phone`, `assistant`
 and `created_at`. Pass `id` as `user_id`. `assistant` is a
@@ -75,7 +75,7 @@ The assistant identity sets the assistant's voice and its default name. Each
 user can have one assistant. Without one, the user has no assistant, as
 before.
 
-1. Read the catalog with `app_settings.assistant_identities()`. A partner
+1. Read the catalog with `settings.assistant_identities()`. A partner
    client reads it without a user. Use only an identity whose `status` is
    `"active"`. To hear an identity, play its `greeting_audio_url`.
 2. Pass `assistant` to `create()` or `update()` as a `dict` with
@@ -83,7 +83,7 @@ before.
 
 | `assistant` | Result |
 |---|---|
-| `{"identity_id": "agt_..."}` | The assistant gets the identity and the identity's own name. |
+| `{"identity_id": "agt_..."}` | The assistant gets the identity and the identity's own name. On update, this also replaces a custom name: to keep it, send `name` too. |
 | `{"identity_id": "agt_...", "name": "Zoe Park"}` | The assistant gets the identity and this name. |
 | `{"name": "Zoe Park"}` | `update()` only: the current identity gets a new name. A user with no identity gets 400. |
 
@@ -93,7 +93,7 @@ keys or with values that are not strings raises `ValueError` before any
 request is sent.
 
 ```python
-catalog = await partner_client.app_settings.assistant_identities()
+catalog = await partner_client.settings.assistant_identities()
 identity = next(item for item in catalog.identities if item.status == "active")
 user = await partner_client.platform.managed_users.update(
     "usr_42", assistant={"identity_id": identity.id, "name": "Zoe Park"},
@@ -150,7 +150,8 @@ caller ID. `caller_id` is a session setting that selects it:
 | `"platform"` | A number of the platform's pool. |
 
 - Set or change it at any time. The agent uses the value for its next call. A
-  call in progress does not change.
+  call already placed, including its retries, keeps its caller ID. A change
+  while the session is paused applies when the session resumes.
 - `caller_id` does not change how the agent reaches the user. The agent still
   uses the user's phone for that.
 - A 503 `session_config_push_failed` means that the value is saved, but the
@@ -241,7 +242,7 @@ from `auth.*`, and `SessionError` from `sessions.list`, `get`, `get_config`,
 | 429 | `too_many_requests` | Too many requests. |
 
 `SessionError` from `sessions.get_config()` and `update_config()`: 403
-`forbidden` for a client that is not a managed user, and 503
+`forbidden` when the client is neither a managed user nor a test account, and 503
 `session_config_push_failed` (see "Caller ID").
 
 The codes for managed users are listed in [docs/http-api.md](http-api.md).

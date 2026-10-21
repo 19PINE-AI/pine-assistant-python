@@ -1,5 +1,5 @@
 """
-App settings — the assistant identity catalog.
+Settings — the assistant identity catalog.
 
 A client with ``api_key`` alone reads the catalog anonymously; a managed-user
 or user-token client reads it as that user.
@@ -12,7 +12,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from pine_assistant.errors import PineAIError
-from pine_assistant.models.app_settings import AssistantIdentityCatalog
+from pine_assistant.models.settings import AssistantIdentityCatalog
 from pine_assistant.transport.http import HttpClient, SyncHttpClient
 
 _ASSISTANT_IDENTITIES = "/v2/app/settings/assistance_identities"
@@ -26,7 +26,7 @@ def _parse_catalog(payload: Any) -> AssistantIdentityCatalog:
         raise PineAIError("invalid_response", "Pine API returned an invalid assistant identity catalog") from None
 
 
-class AppSettingsAPI:
+class SettingsAPI:
     def __init__(self, http: HttpClient):
         self._http = http
 
@@ -36,7 +36,7 @@ class AppSettingsAPI:
         return _parse_catalog(payload)
 
 
-class SyncAppSettingsAPI:
+class SyncSettingsAPI:
     def __init__(self, http: SyncHttpClient):
         self._http = http
 

@@ -264,7 +264,7 @@ async def test_get_config_parses_set_and_unset_values(payload, caller_id, extra)
 async def test_key_only_client_reads_the_catalog_anonymously():
     recorder = Recorder()
     async with async_client(recorder) as client:
-        catalog = await client.app_settings.assistant_identities()
+        catalog = await client.settings.assistant_identities()
 
     assert isinstance(catalog, AssistantIdentityCatalog)
     assert catalog.version == "0123456789abcdef"
@@ -283,7 +283,7 @@ def test_managed_user_client_reads_the_catalog_as_the_user():
     with PineAI(
         api_key=API_KEY, user_id=PINE_USER_ID, base_url=BASE_URL, http_transport=httpx.MockTransport(recorder),
     ) as client:
-        catalog = client.app_settings.assistant_identities()
+        catalog = client.settings.assistant_identities()
 
     assert catalog.identities[0].id == "agt_ava"
     [request] = recorder.requests

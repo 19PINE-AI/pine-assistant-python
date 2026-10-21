@@ -9,12 +9,10 @@ verbatim but carry no compatibility guarantee: tolerate them, do not depend on
 them. `is_supported_event` tells the two apart.
 """
 
-from pine_assistant.app_settings import AppSettingsAPI, SyncAppSettingsAPI
 from pine_assistant.auth import Auth, SyncAuth
 from pine_assistant.chat import ChatEvent
 from pine_assistant.client import AsyncPineAI, PineAI
 from pine_assistant.errors import AuthError, ConnectionError, PineAIError, PlatformError, SessionError
-from pine_assistant.models.app_settings import AssistantIdentity, AssistantIdentityCatalog
 from pine_assistant.models.auth import AuthIdentity, AuthTicket, RedeemedTicket
 from pine_assistant.models.events import (
     SUPPORTED_EVENTS,
@@ -35,6 +33,7 @@ from pine_assistant.models.session import (
     SessionOutcomeRating,
     SessionOutcomesPage,
 )
+from pine_assistant.models.settings import AssistantIdentity, AssistantIdentityCatalog
 from pine_assistant.platform_api import (
     ManagedUsersAPI,
     PlatformAPI,
@@ -44,6 +43,7 @@ from pine_assistant.platform_api import (
     validate_user_id,
 )
 from pine_assistant.sessions import SessionsAPI, SyncSessionsAPI
+from pine_assistant.settings import SettingsAPI, SyncSettingsAPI
 from pine_assistant.transport.http import API_KEY_PREFIXES, MANAGED_USER_HEADER
 
 __version__ = "0.5.0rc3"
@@ -54,8 +54,8 @@ __all__ = [
     "SyncAuth",
     "SessionsAPI",
     "SyncSessionsAPI",
-    "AppSettingsAPI",
-    "SyncAppSettingsAPI",
+    "SettingsAPI",
+    "SyncSettingsAPI",
     "PlatformAPI",
     "SyncPlatformAPI",
     "ManagedUsersAPI",

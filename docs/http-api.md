@@ -105,7 +105,7 @@ its `greeting_audio_url`.
 
 | `assistant` | Result |
 |---|---|
-| `{"identity_id": "agt_..."}` | The assistant gets the identity and the identity's own name. |
+| `{"identity_id": "agt_..."}` | The assistant gets the identity and the identity's own name. On update, this also replaces a custom name: to keep it, send `name` too. |
 | `{"identity_id": "agt_...", "name": "Zoe Park"}` | The assistant gets the identity and this name. |
 | `{"name": "Zoe Park"}` | Update only: the current identity gets a new name. A user with no identity gets 400. |
 
@@ -184,7 +184,8 @@ caller ID. `caller_id` is a session setting that selects it:
 | `"platform"` | A number of the platform's pool. |
 
 - Set or change it at any time. The agent uses the value for its next call. A
-  call in progress does not change.
+  call already placed, including its retries, keeps its caller ID. A change
+  while the session is paused applies when the session resumes.
 - `caller_id` does not change how the agent reaches the user. The agent still
   uses the user's phone for that.
 - Any other key or value returns 400 `invalid_request`.
