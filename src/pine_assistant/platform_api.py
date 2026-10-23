@@ -62,13 +62,12 @@ def _optional_members(**members: Any) -> dict[str, Any]:
 
 
 def _create_body(
-    external_id: str, email: str, name: str, phone: str | None, assistant: dict[str, str] | None,
+    external_id: str, email: str | None, name: str, phone: str | None, assistant: dict[str, str] | None,
 ) -> dict[str, Any]:
     return {
         "external_id": validate_external_id(external_id),
-        "email": email,
         "name": name,
-        **_optional_members(phone=phone, assistant=assistant),
+        **_optional_members(email=email, phone=phone, assistant=assistant),
     }
 
 
@@ -95,7 +94,7 @@ class ManagedUsersAPI:
         self,
         external_id: str,
         *,
-        email: str,
+        email: str | None = None,
         name: str,
         phone: str | None = None,
         assistant: dict[str, str] | None = None,
@@ -104,7 +103,9 @@ class ManagedUsersAPI:
 
         Idempotent per partner and ``external_id``: a repeated call returns
         the stored user even when ``email``, ``name``, ``phone`` or
-        ``assistant`` differ. ``phone`` is an E.164 number you have verified.
+        ``assistant`` differ. ``email=None`` creates a user without an email,
+        who can do phone tasks but not email tasks. ``phone`` is an E.164
+        number you have verified.
         ``assistant`` is ``{"identity_id": ..., "name": ...}``; ``name`` needs
         ``identity_id``.
         """
@@ -135,7 +136,8 @@ class ManagedUsersAPI:
     ) -> ManagedUser:
         """Change only the members given and return the stored user.
 
-        ``None`` leaves a member unchanged; ``phone=""`` removes the phone.
+        ``None`` leaves a member unchanged; ``email=""`` removes the email and
+        ``phone=""`` removes the phone.
         ``assistant`` takes ``identity_id``, ``name`` or both; a name alone
         renames the current identity. The agent uses the new profile from the
         user's next message.
@@ -157,7 +159,7 @@ class SyncManagedUsersAPI:
         self,
         external_id: str,
         *,
-        email: str,
+        email: str | None = None,
         name: str,
         phone: str | None = None,
         assistant: dict[str, str] | None = None,

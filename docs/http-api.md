@@ -36,7 +36,7 @@ Use `error.code` in your code. The `message` text can change.
 | Field | Required | Rule |
 |---|---|---|
 | `external_id` | yes | 1-128 letters, digits, `.`, `_`, `:`, `|`, `-`; must not start with `.`; no personal data |
-| `email` | yes | email address |
+| `email` | no | email address; omit it or send `""` for a user without an email |
 | `name` | yes | 1-100 characters |
 | `phone` | no | E.164, for example `+14155550100`; a number you have verified |
 | `assistant` | no | `{"identity_id": "...", "name": "..."}`; see "Assistant identity" |
@@ -55,6 +55,8 @@ you send are different.
 
 The response `data` is the managed user:
 `{"id", "external_id", "email", "name", "phone", "assistant", "created_at"}`.
+`email` is `""` when the user has no email. A managed user without an email
+cannot do email tasks, only phone tasks.
 `phone` is `null` when the user has no phone. `assistant` is
 `{"identity_id", "name"}`, or `null` when the user uses Pine's default assistant.
 
@@ -78,7 +80,7 @@ value. `{}` changes nothing.
 
 | Field | Rule |
 |---|---|
-| `email` | email address |
+| `email` | email address, or `""` to remove the email |
 | `name` | 1-100 characters |
 | `phone` | E.164, or `""` to remove the phone |
 | `assistant` | `{"identity_id": "...", "name": "..."}`; either member can be omitted; see "Assistant identity" |

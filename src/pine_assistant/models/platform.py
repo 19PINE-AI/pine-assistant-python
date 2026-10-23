@@ -19,7 +19,8 @@ class ManagedUser(BaseModel):
 
     ``id`` is the Pine user ID. Store it, and pass it as ``user_id`` with the
     ``api_key`` to act as this user on ``/api/v2`` and Socket.IO. The Platform
-    API never accepts it as input.
+    API never accepts it as input. ``email`` is ``""`` when the user has no
+    email.
     """
 
     model_config = ConfigDict(extra="allow")
