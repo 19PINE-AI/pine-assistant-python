@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0rc4] - 2026-10-23
+
+### New
+
+- **Managed users without an email.** `email` is optional on
+  `platform.managed_users.create()`, and `update(email="")` removes it. A
+  managed user without an email cannot do email tasks.
+
 ## [0.5.0rc3] - 2026-10-21
 
 Release candidate for 0.5.0.

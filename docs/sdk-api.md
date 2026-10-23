@@ -43,7 +43,7 @@ async with AsyncPineAI(api_key=key, user_id=user.id) as client:
 
 | Method | Returns |
 |---|---|
-| `platform.managed_users.create(external_id, *, email, name, phone=None, assistant=None)` | `ManagedUser`. Idempotent per `external_id`: a repeat returns the stored user unchanged. |
+| `platform.managed_users.create(external_id, *, email=None, name, phone=None, assistant=None)` | `ManagedUser`. Idempotent per `external_id`: a repeat returns the stored user unchanged. |
 | `platform.managed_users.get(external_id)` | `ManagedUser` |
 | `platform.managed_users.update(external_id, *, email=None, name=None, phone=None, assistant=None)` | `ManagedUser` after the change. |
 | `settings.assistant_identities()` | `AssistantIdentityCatalog`: the identities to choose an assistant from. |
@@ -51,7 +51,10 @@ async with AsyncPineAI(api_key=key, user_id=user.id) as client:
 `ManagedUser` has `id`, `external_id`, `email`, `name`, `phone`, `assistant`
 and `created_at`. Pass `id` as `user_id`. `assistant` is a
 `ManagedUserAssistant` with `identity_id` and `name`, or `None` when the user
-uses Pine's default assistant.
+uses Pine's default assistant. `email` is `""` when the user has no email.
+
+`email` is optional on `create()`. `update(email="")` removes the email. A
+managed user without an email cannot do email tasks.
 
 ### Change a managed user
 

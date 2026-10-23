@@ -86,6 +86,7 @@ def async_client(recorder: Recorder, user_id: str | None = None) -> AsyncPineAI:
     [
         ({}, {}),
         ({"phone": ""}, {"phone": ""}),
+        ({"email": ""}, {"email": ""}),
         ({"email": "new@example.com", "name": "Ada King"}, {"email": "new@example.com", "name": "Ada King"}),
         ({"phone": "+14155550100", "email": None}, {"phone": "+14155550100"}),
         ({"assistant": {}}, {"assistant": {}}),
@@ -125,6 +126,23 @@ async def test_create_sends_the_assistant():
         "name": "Ada Lovelace",
         "assistant": {"identity_id": "agt_ava"},
     }
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "body"),
+    [
+        ({}, {}),
+        ({"email": "ada@example.com"}, {"email": "ada@example.com"}),
+        ({"email": ""}, {"email": ""}),
+    ],
+)
+def test_create_sends_the_email_only_when_given(kwargs, body):
+    recorder = Recorder(httpx.Response(201, json=success(managed_user(email=body.get("email", "")))))
+    with PineAI(api_key=API_KEY, base_url=BASE_URL, http_transport=httpx.MockTransport(recorder)) as client:
+        user = client.platform.managed_users.create(EXTERNAL_ID, name="Ada Lovelace", **kwargs)
+
+    assert recorder.body() == {"external_id": EXTERNAL_ID, "name": "Ada Lovelace", **body}
+    assert user.email == body.get("email", "")
 
 
 @pytest.mark.asyncio
