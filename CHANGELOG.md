@@ -9,6 +9,12 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 Release candidate for 0.5.0.
 
+### Upgrade from 0.5.0rc3
+
+`ManagedUser.email` can now be `""`. A user created without an email has
+none, and `update(email="")` removes it. Code that reads `email` must accept
+`""`. Calls that pass `email` work as before.
+
 ### New
 
 - **Managed users without an email.** `email` is optional on
