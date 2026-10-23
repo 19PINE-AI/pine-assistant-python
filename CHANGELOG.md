@@ -11,7 +11,7 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 - **Managed users without an email.** `email` is optional on
   `platform.managed_users.create()`, and `update(email="")` removes it. A
-  managed user without an email can do phone tasks, but not email tasks.
+  managed user without an email cannot do email tasks.
 
 ## [0.5.0rc3] - 2026-10-21
 

@@ -104,8 +104,8 @@ class ManagedUsersAPI:
         Idempotent per partner and ``external_id``: a repeated call returns
         the stored user even when ``email``, ``name``, ``phone`` or
         ``assistant`` differ. ``email=None`` creates a user without an email,
-        who can do phone tasks but not email tasks. ``phone`` is an E.164
-        number you have verified.
+        who cannot do email tasks. ``phone`` is an E.164 number you have
+        verified.
         ``assistant`` is ``{"identity_id": ..., "name": ...}``; ``name`` needs
         ``identity_id``.
         """

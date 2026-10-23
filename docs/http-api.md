@@ -56,7 +56,7 @@ you send are different.
 The response `data` is the managed user:
 `{"id", "external_id", "email", "name", "phone", "assistant", "created_at"}`.
 `email` is `""` when the user has no email. A managed user without an email
-cannot do email tasks, only phone tasks.
+cannot do email tasks.
 `phone` is `null` when the user has no phone. `assistant` is
 `{"identity_id", "name"}`, or `null` when the user uses Pine's default assistant.
 

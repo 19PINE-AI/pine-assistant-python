@@ -54,7 +54,7 @@ and `created_at`. Pass `id` as `user_id`. `assistant` is a
 uses Pine's default assistant. `email` is `""` when the user has no email.
 
 `email` is optional on `create()`. `update(email="")` removes the email. A
-managed user without an email cannot do email tasks, only phone tasks.
+managed user without an email cannot do email tasks.
 
 ### Change a managed user
 

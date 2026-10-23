@@ -152,8 +152,7 @@ async with AsyncPineAI(api_key=api_key) as partner_client:
 # Save user.id with your own user record.
 ```
 
-`email` is optional. A managed user without an email cannot do email tasks,
-only phone tasks.
+`email` is optional. A managed user without an email cannot do email tasks.
 
 `user.id` is the Pine user ID, a decimal string such as `"123456789"`. To act
 as that user, pass it as `user_id` together with the key. Every user-scoped
