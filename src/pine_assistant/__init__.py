@@ -46,7 +46,7 @@ from pine_assistant.sessions import SessionsAPI, SyncSessionsAPI, validate_clien
 from pine_assistant.settings import SettingsAPI, SyncSettingsAPI
 from pine_assistant.transport.http import API_KEY_PREFIXES, MANAGED_USER_HEADER
 
-__version__ = "0.5.0rc3"
+__version__ = "0.5.0rc4"
 __all__ = [
     "PineAI",
     "AsyncPineAI",
