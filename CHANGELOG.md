@@ -19,8 +19,8 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 - **Stop works before the task starts.** `sessions.stop_task()` now stops the
   agent while it talks with the user (`chat`) and while the task is prepared
-  (`task_ready`), not only while the task runs. The session is kept, and
-  `sessions.start_task()` continues it; a message alone does not. A task
+  (`task_ready`), not only while the task runs. `sessions.start_task()`
+  continues it; a message alone does not. A task
   stopped in `task_ready` does not start on its own. A phone call that is not
   dialed yet is not dialed after a stop. No SDK code changed; this needs the
   matching Pine server release.

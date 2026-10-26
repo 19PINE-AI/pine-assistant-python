@@ -159,7 +159,7 @@ These routes take the two headers above.
 | `POST /v2/sessions/{id}/messages` | Sends a message. Body: `{"content": "...", "client_now_date": "..."}`; `client_now_date` is optional, see "The user's time". | `sessions.send_message()` |
 | `GET /v2/sessions/{id}/messages` | Reads the stored messages, newest first. | `sessions.history()` |
 | `POST /v2/sessions/{id}/start` | Starts a prepared or paused task, or continues a stopped session. See "Stop and continue". | `sessions.start_task()` |
-| `POST /v2/sessions/{id}/stop` | Stops the agent's work and keeps the session. See "Stop and continue". | `sessions.stop_task()` |
+| `POST /v2/sessions/{id}/stop` | Stops the agent. See "Stop and continue". | `sessions.stop_task()` |
 | `GET /v2/sessions/{id}/outcomes` | Lists the session's outcomes. | `sessions.outcomes()` |
 
 Routes that make the agent work can also return these errors:
@@ -246,7 +246,7 @@ The session's `state` shows where the task is:
 
 ### Stop and continue
 
-`POST /v2/sessions/{id}/stop` stops the agent and keeps the session:
+`POST /v2/sessions/{id}/stop` stops the agent:
 
 | `state` when you stop | What happens |
 |---|---|

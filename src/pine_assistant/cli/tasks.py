@@ -38,7 +38,7 @@ def task_start(session_id):
 @task.command("stop")
 @click.argument("session_id")
 def task_stop(session_id):
-    """Stop the agent's work and keep the session."""
+    """Stop the agent."""
 
     async def _stop():
         client = _get_client()
