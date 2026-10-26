@@ -238,7 +238,7 @@ The session's `state` shows where the task is:
 |---|---|
 | `init` | The session is new. |
 | `chat` | The agent talks with the user. |
-| `task_ready` | The task is prepared. It usually starts on its own. It stays here if the running-task limit is reached, or if you stopped the session: call `start`. |
+| `task_ready` | The task is prepared. It usually starts on its own. If the running-task limit is reached, it stays here: call `start` later. |
 | `task_processing` | The task runs. |
 | `task_paused` | The task is paused because you stopped it, or because a limit is reached. Call `start` to continue (after the limit allows it). |
 | `task_finished` | The task is done. Read the result with `outcomes`. |
