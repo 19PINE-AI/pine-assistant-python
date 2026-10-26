@@ -134,8 +134,15 @@ user = await partner_client.platform.managed_users.update(
 The agent talks with the user, prepares the task, and then starts it on its
 own, as it does for a normal Pine user. `sessions.get()` returns the session's
 `state`. The states are listed in [docs/http-api.md](http-api.md#how-a-task-runs).
-Use `sessions.start_task()` only for a task that did not start on its own or
-that is paused.
+Use `sessions.start_task()` only for a task that did not start on its own, that
+is paused, or that you stopped.
+
+`sessions.stop_task()` stops the agent and keeps the session, in `chat`,
+`task_ready` and `task_processing`. To continue, call `sessions.start_task()`;
+when the user writes after a stop, send the message first and then call
+`start_task()`. A message alone does not continue a stopped session. The
+details and errors are in
+[docs/http-api.md](http-api.md#stop-and-continue).
 
 Without Socket.IO, send with `sessions.send_message()` and read the replies
 with `sessions.history()`. Each message has `message_id`, `type`, `version`,

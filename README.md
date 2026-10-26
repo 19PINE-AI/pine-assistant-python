@@ -311,6 +311,12 @@ async for event in client.chat(sid, "...", turn_timeout=120):
     ...
 ```
 
+A stop does not always end a turn. `sessions.stop_task()` in `task_processing`
+moves the session to `task_paused`, which ends the turn. In `chat` or
+`task_ready` the `state` does not change, so a turn that waits on work keeps
+waiting. After you call `stop_task()`, stop reading that turn yourself, or use
+`turn_timeout`.
+
 Without `turn_timeout` a turn is waited on indefinitely. Note also that a task
 outlives the turn that started it: an outbound call reports through
 `session:tool_status` minutes after `chat()` has returned, which `subscribe()`
