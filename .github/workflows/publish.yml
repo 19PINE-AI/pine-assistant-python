@@ -21,6 +21,9 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Check the tag matches the declared version
+        run: python .github/version.py --check "${GITHUB_REF_NAME#v}"
+
       - name: Install build tools
         run: pip install build
 
