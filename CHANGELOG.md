@@ -17,17 +17,10 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- **Stop works before the task starts.** `sessions.stop_task()` now stops the
-  agent while it talks with the user (`chat`) and while the task is prepared
-  (`task_ready`), not only while the task runs. `sessions.start_task()`
-  continues it; a message alone does not. A task
-  stopped in `task_ready` does not start on its own. A phone call that is not
-  dialed yet is not dialed after a stop. No SDK code changed; this needs the
-  matching Pine server release.
-- **Stop errors.** Stopping a finished or cancelled session returns 400
-  `session_state_not_allowed`. Stop and start can return 429
-  `too_many_requests` while another start or stop of the same session is in
-  progress; send the request again.
+- **Stop works before the task starts.** `sessions.stop_task()` now also stops
+  the agent in `chat` and `task_ready`, and `sessions.start_task()` continues
+  the session. See "Stop and continue" in `docs/http-api.md`. No SDK code
+  changed; this needs the matching Pine server release.
 
 ## [0.5.0rc3] - 2026-10-21
 

@@ -176,7 +176,7 @@ Stop and start can also return:
 |---|---|---|
 | 400 | `session_state_not_allowed` | Stop: the session is finished or cancelled. |
 | 400 | `session_not_in_ready_state` | Start: there is nothing to start or continue. |
-| 429 | `too_many_requests` | Stop or start: another start or stop of the same session is in progress. Send the request again. |
+| 429 | `too_many_requests` | Stop or start: the session is busy with another change. Send the request again. |
 
 `GET /v2/sessions/{id}/messages` takes two optional query values: `limit`
 (1-100, default 30) and `before_message_id`. Each message has `message_id`,
@@ -250,7 +250,7 @@ The session's `state` shows where the task is:
 
 | `state` when you stop | What happens |
 |---|---|
-| `chat` | The agent starts no new action, and the task does not become ready. A reply or action already in progress finishes. The `state` stays `chat`. |
+| `chat` | The agent starts no new action, and the task does not start on its own. A reply or action already in progress finishes. The `state` stays `chat`. |
 | `task_ready` | The task does not start on its own. |
 | `task_processing` | The task pauses (`task_paused`). The agent starts no new action. A phone call that is not dialed yet is not dialed, and a call in progress is hung up. |
 | `init`, `task_paused`, or already stopped | Nothing changes. The answer is 200. |
@@ -260,9 +260,6 @@ session is stopped is saved but does not continue it. You can send the user's
 message before or after `start`; before is better, because the agent then reads
 the message before it goes on. If you start first, the agent may continue the
 stopped step (for example, place the call) before the message arrives.
-
-If `start` is refused by a limit, the session stays stopped; call `start` again
-later.
 
 ### Talk with the agent
 
