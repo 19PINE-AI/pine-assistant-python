@@ -237,7 +237,7 @@ The session's `state` shows where the task is:
 | `state` | Meaning |
 |---|---|
 | `init` | The session is new. |
-| `chat` | The agent talks with the user. After a stop, the session stays in `chat` and the agent waits. |
+| `chat` | The agent talks with the user. |
 | `task_ready` | The task is prepared. It usually starts on its own. It stays here if the running-task limit is reached, or if you stopped the session: call `start`. |
 | `task_processing` | The task runs. |
 | `task_paused` | The task is paused because you stopped it, or because a limit is reached. Call `start` to continue (after the limit allows it). |
@@ -246,9 +246,7 @@ The session's `state` shows where the task is:
 
 ### Stop and continue
 
-`POST /v2/sessions/{id}/stop` stops the agent and keeps the session. Use it for
-a stop button: it works while the agent talks with the user, while the task is
-prepared, and while the task runs.
+`POST /v2/sessions/{id}/stop` stops the agent and keeps the session:
 
 | `state` when you stop | What happens |
 |---|---|
@@ -256,18 +254,15 @@ prepared, and while the task runs.
 | `task_ready` | The task does not start on its own. |
 | `task_processing` | The task pauses (`task_paused`). The agent starts no new action. A phone call that is not dialed yet is not dialed, and a call in progress is hung up. |
 | `init`, `task_paused`, or already stopped | Nothing changes. The answer is 200. |
-| `task_finished`, `task_cancelled` | 400 `session_state_not_allowed`. |
 
-To continue, call `POST /v2/sessions/{id}/start`. A message that the user sends
-while the session is stopped is saved, and the agent reads it when the session
-continues. Sending a message does not continue the session by itself. So when
-the user writes after a stop, send the message and then call `start`.
+To continue, call `POST /v2/sessions/{id}/start`. A message sent while the
+session is stopped is saved but does not continue it. You can send the user's
+message before or after `start`; before is better, because the agent then reads
+the message before it goes on. If you start first, the agent may continue the
+stopped step (for example, place the call) before the message arrives.
 
-`start` checks your limits as for any start: it can return 402, 403 or 409 (see
-the tables above). Then the session stays stopped; call `start` again later.
-
-Do not use `DELETE /v2/sessions/{id}` as a stop. It deletes the session, and
-the user cannot continue it.
+If `start` is refused by a limit, the session stays stopped; call `start` again
+later.
 
 ### Talk with the agent
 
