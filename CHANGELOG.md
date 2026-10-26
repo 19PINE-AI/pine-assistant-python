@@ -28,9 +28,6 @@ project adheres to [Semantic Versioning](https://semver.org/).
   `session_state_not_allowed`. Stop and start can return 429
   `too_many_requests` while another start or stop of the same session is in
   progress; send the request again.
-- After `stop_task()` in `chat` or `task_ready`, the `state` does not change,
-  so `chat()` may keep waiting on the turn. See "When a turn ends" in the
-  README.
 
 ## [0.5.0rc3] - 2026-10-21
 
