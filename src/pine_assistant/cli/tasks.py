@@ -24,7 +24,7 @@ def task():
 @task.command("start")
 @click.argument("session_id")
 def task_start(session_id):
-    """Start task execution (requires task_ready)."""
+    """Start a prepared task, or continue a paused or stopped session."""
 
     async def _start():
         client = _get_client()
@@ -38,7 +38,7 @@ def task_start(session_id):
 @task.command("stop")
 @click.argument("session_id")
 def task_stop(session_id):
-    """Stop a running task."""
+    """Stop the agent."""
 
     async def _stop():
         client = _get_client()

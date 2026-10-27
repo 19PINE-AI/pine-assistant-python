@@ -158,8 +158,8 @@ These routes take the two headers above.
 | `PUT /v2/sessions/{id}/config` | Sets the caller ID. Body: `{"caller_id": "user"}` or `{"caller_id": "platform"}`. See "Caller ID". | `sessions.update_config()` |
 | `POST /v2/sessions/{id}/messages` | Sends a message. Body: `{"content": "...", "client_now_date": "..."}`; `client_now_date` is optional, see "The user's time". | `sessions.send_message()` |
 | `GET /v2/sessions/{id}/messages` | Reads the stored messages, newest first. | `sessions.history()` |
-| `POST /v2/sessions/{id}/start` | Starts a prepared or paused task. | `sessions.start_task()` |
-| `POST /v2/sessions/{id}/stop` | Stops a running task. | `sessions.stop_task()` |
+| `POST /v2/sessions/{id}/start` | Starts a prepared or paused task, or continues a stopped session. See "Stop and continue". | `sessions.start_task()` |
+| `POST /v2/sessions/{id}/stop` | Stops the agent. See "Stop and continue". | `sessions.stop_task()` |
 | `GET /v2/sessions/{id}/outcomes` | Lists the session's outcomes. | `sessions.outcomes()` |
 
 Routes that make the agent work can also return these errors:
@@ -169,6 +169,14 @@ Routes that make the agent work can also return these errors:
 | 402 | `platform_spend_limit_reached` | The partner's credit limit is reached. |
 | 409 | `platform_session_limit_reached` | Start: the partner's running-task limit is reached. |
 | 409 | `platform_session_state_conflict` | Message: the session is finished or cancelled. |
+
+Stop and start can also return:
+
+| Status | Code | Cause |
+|---|---|---|
+| 400 | `session_state_not_allowed` | Stop: the session is finished or cancelled. |
+| 400 | `session_not_in_ready_state` | Start: there is nothing to start or continue. |
+| 429 | `too_many_requests` | Stop or start: the session is busy with another change. Send the request again. |
 
 `GET /v2/sessions/{id}/messages` takes two optional query values: `limit`
 (1-100, default 30) and `before_message_id`. Each message has `message_id`,
@@ -232,9 +240,26 @@ The session's `state` shows where the task is:
 | `chat` | The agent talks with the user. |
 | `task_ready` | The task is prepared. It usually starts on its own. If the running-task limit is reached, it stays here: call `start` later. |
 | `task_processing` | The task runs. |
-| `task_paused` | The task is paused, for example because the credit limit is reached. When the cause is removed, call `start` to continue. |
+| `task_paused` | The task is paused because you stopped it, or because a limit is reached. Call `start` to continue (after the limit allows it). |
 | `task_finished` | The task is done. Read the result with `outcomes`. |
 | `task_cancelled` | The task was cancelled. |
+
+### Stop and continue
+
+`POST /v2/sessions/{id}/stop` stops the agent:
+
+| `state` when you stop | What happens |
+|---|---|
+| `chat` | The agent starts no new action, and the task does not start on its own. A reply or action already in progress finishes. The `state` stays `chat`. |
+| `task_ready` | The task does not start on its own. |
+| `task_processing` | The task pauses (`task_paused`). The agent starts no new action. A phone call that is not dialed yet is not dialed, and a call in progress is hung up. |
+| `init`, `task_paused`, or already stopped | Nothing changes. The answer is 200. |
+
+To continue, call `POST /v2/sessions/{id}/start`. A message sent while the
+session is stopped is saved but does not continue it. You can send the user's
+message before or after `start`; before is better, because the agent then reads
+the message before it goes on. If you start first, the agent may continue the
+stopped step (for example, place the call) before the message arrives.
 
 ### Talk with the agent
 
