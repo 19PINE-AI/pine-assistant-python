@@ -13,15 +13,6 @@ project adheres to [Semantic Versioning](https://semver.org/).
   `platform.managed_users.create()`, and `update(email="")` removes it. A
   managed user without an email cannot do email tasks.
 
-## [Unreleased]
-
-### Changed
-
-- **Stop works before the task starts.** `sessions.stop_task()` now also stops
-  the agent in `chat` and `task_ready`, and `sessions.start_task()` continues
-  the session. See "Stop and continue" in `docs/http-api.md`. No SDK code
-  changed; this needs the matching Pine server release.
-
 ## [0.5.0rc3] - 2026-10-21
 
 Release candidate for 0.5.0.
