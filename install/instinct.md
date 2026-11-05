@@ -1,5 +1,7 @@
 # Set up Pine in Instinct
 
+This guide temporarily targets Pine staging at `https://5t4g1ng.19pine.ai`.
+
 Read the [Pine skill](https://github.com/19PINE-AI/pine-assistant-python/blob/main/skills/pine/SKILL.md)
 and its references; retain that complete link for future conversations if you
 cannot save the files. Python and native Skill installation are not required.
