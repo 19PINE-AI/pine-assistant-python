@@ -12,7 +12,7 @@ Contact / phone number / search criteria:
 Relevant background and requirements: (if available)
 ```
 
-The goal and enough information to identify or find the contact are required. Use the current conversation first. For public businesses or organizations, pass a known number or enough information for Pine to find a public number. For private contacts, use a number provided by the user or retrieved from an authorized source the client can actually access. If neither is available, ask for the number; do not search publicly or guess it. The current Pine REST integration do not provide contact lookup, so do not promise to retrieve a number from a Pine address book. Include the country code when known, and clarify ambiguous dialing information when needed.
+The goal and enough information to identify or find the contact are required. Use the current conversation first. For public businesses or organizations, pass a known number or enough information for Pine to find a public number. For private contacts, use a number provided by the user or retrieved from an authorized source the client can actually access. If neither is available, ask for the number; do not search publicly or guess it. The current Pine REST integration does not provide contact lookup, so do not promise to retrieve a number from a Pine address book. Include the country code when known, and clarify ambiguous dialing information when needed.
 
 Always carry over the user's known constraints and any relevant background. Omit an optional heading when it has no content. Ask about missing information only when it blocks progress; otherwise Pine can ask follow-up questions during the task. Do not invent personal facts, preferences, or authorization to fill the template.
 

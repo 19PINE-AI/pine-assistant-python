@@ -13,7 +13,7 @@ A clear task request is authorization: do not ask a separate “start?” questi
 
 Use the [agent REST OpenAPI](https://www.19pine.ai/api/docs/agent-rest.openapi.json) for request and response schemas. Its server `/api` resolves on `https://www.19pine.ai`; routes below are relative to that server. The API provides capabilities to create, list, and get sessions; send a message; read history and outcomes; and stop an agent. It does not require a separate task-start call for a new task.
 
-Authenticate with the normal user's bearer from [Instinct setup](../../install/instinct.md), stored in the client's credential store. Send it only to Pine, not in prompts or logs. On authentication failure, repeat setup with the same account and verify its user ID before continuing; do not automatically replay writes.
+Authenticate with the normal user's bearer from [Instinct setup](../../install/instinct.md), stored in the client's credential store. Send it only to Pine, not in prompts or logs. On a 401 for an expired or invalid token, repeat setup with the same account and verify its user ID before continuing; do not automatically replay writes.
 
 ## Start or continue work
 

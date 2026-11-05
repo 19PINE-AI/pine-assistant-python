@@ -1,7 +1,7 @@
 # Set up Pine in Instinct
 
 Use REST with Instinct's API Key credential storage. Python, MCP, and native
-Skill installation are not required. Read the [Pine REST skill](../skills/pine-rest/SKILL.md)
+Skill installation are not required. Read the [Pine REST skill](https://github.com/19PINE-AI/pine-assistant-python/blob/main/skills/pine-rest/SKILL.md)
 and its references; retain that complete link for future conversations if you
 cannot save the files.
 
