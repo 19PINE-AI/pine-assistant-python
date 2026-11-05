@@ -11,11 +11,11 @@ For a new or continuing phone task, read [Phone tasks](references/phone-tasks.md
 
 A clear task request is authorization: do not ask a separate “start?” question. Gather only information that is necessary to act.
 
-Use the [agent protocol](https://www.19pine.ai/api/docs/agent-protocol.md) for Socket.IO connection details and event payloads, and the [agent REST OpenAPI](https://www.19pine.ai/api/docs/agent-rest.openapi.json) for HTTP request and response schemas. Its server `/api` resolves on `https://www.19pine.ai`; routes below are relative to that server. The API provides capabilities to create, list, and get sessions; send a message; read history and outcomes; and stop an agent. It does not require a separate task-start call for a new task.
+Use the [client AsyncAPI](https://www.19pine.ai/api/docs/client.asyncapi.json) for Socket.IO connection details and event payloads, and the [client OpenAPI](https://www.19pine.ai/api/docs/client.openapi.json) for HTTP request and response schemas. Its server `/api` resolves on `https://www.19pine.ai`; routes below are relative to that server. The API provides capabilities to create, list, and get sessions; send a message; read history and outcomes; and stop an agent. It does not require a separate task-start call for a new task.
 
 ## Choose a transport
 
-Prefer Socket.IO when the execution environment can keep a client connected and receive callbacks. Use the Pine SDK if available, or a compatible Socket.IO client following the agent protocol; Python is not required. Wait for `ready`, join the selected session, and recover its history before sending or interpreting new work. Use REST for session management and other HTTP operations as needed.
+Prefer Socket.IO when the execution environment can keep a client connected and receive callbacks. Use the Pine SDK if available, or a compatible Socket.IO client following the client AsyncAPI; Python is not required. Wait for `ready`, join the selected session, and recover its history before sending or interpreting new work. Use REST for session management and other HTTP operations as needed.
 
 If the environment only supports HTTP requests, use REST directly. If Socket.IO fails, attempt bounded connection recovery, then use REST with the same account and session after reconciling history. Do not replay writes when switching transports. Authentication, billing, account restrictions, and rejected actions require their own resolution; switching transports does not bypass them.
 
