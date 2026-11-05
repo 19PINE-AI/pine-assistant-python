@@ -3,8 +3,9 @@
 > **Caution:** this page is a reference, not a supported contract.
 
 This page covers only part of the Socket.IO protocol. While you use Socket.IO,
-the server can also send events that this page does not describe. For the full
-protocol, contact us.
+the server can also send events that this page does not describe. For the public connection and event contract, see the
+[agent protocol](https://www.19pine.ai/api/docs/agent-protocol.md).
+The managed-user authentication guidance below still applies to partners.
 
 ## Connect
 
