@@ -13,7 +13,16 @@ A clear task request is authorization: do not ask a separate “start?” questi
 
 Use the [agent REST OpenAPI](https://www.19pine.ai/api/docs/agent-rest.openapi.json) for request and response schemas. Its server `/api` resolves on `https://www.19pine.ai`; routes below are relative to that server. The API provides capabilities to create, list, and get sessions; send a message; read history and outcomes; and stop an agent. It does not require a separate task-start call for a new task.
 
-Authenticate with the normal user's bearer from [Instinct setup](../../install/instinct.md), stored in the client's credential store. Send it only to Pine, not in prompts or logs. On a 401 for an expired or invalid token, repeat setup with the same account and verify its user ID before continuing; do not automatically replay writes.
+## Authentication
+
+Use a normal user bearer token, not a partner API key or MCP OAuth token. If the API definition is unavailable, report that setup is incomplete rather than inventing a request.
+
+1. Ask for the user's Pine account email. Explain that verifying an email without an existing account creates one; use their existing account when intended.
+2. Send `POST /v2/auth/email/request` with `{"email":"..."}` and retain `data.request_token`. Ask for the emailed code, then send `POST /v2/auth/email/verify` with `email`, `code`, and `request_token`.
+3. Save `data.access_token` in secure credential storage and use `Authorization: Bearer <access_token>` for authenticated Pine requests. Send it only to Pine, not in prompts or logs. Do not print it or save it in the Skill. If secure storage is unavailable, ask the user to configure the credential securely instead.
+4. Verify with `GET /v2/auth/me` and retain `data.user_id`. Setup does not create sessions, send task instructions, or make calls.
+
+Successful authentication renews the token's idle expiry (30 days in the production configuration). On a 401 for an expired or invalid token, repeat email login with the same account and verify its user ID before continuing existing tasks. Do not automatically replay a failed write after signing in; follow the recovery rules below.
 
 ## Start or continue work
 
