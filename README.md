@@ -13,6 +13,11 @@ pip install pine-assistant          # SDK only
 pip install pine-assistant[cli]     # SDK + CLI
 ```
 
+## Instinct and REST agents
+
+Follow [Set up Pine in Instinct](install/instinct.md) to connect with a user token
+and the [Pine REST skill](skills/pine-rest/SKILL.md), without installing Python.
+
 ## Quick Start (Async)
 
 ```python
