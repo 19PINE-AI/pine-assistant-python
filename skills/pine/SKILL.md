@@ -11,9 +11,9 @@ For a new or continuing phone task, read [Phone tasks](references/phone-tasks.md
 
 A clear task request is authorization: do not ask a separate “start?” question. Gather only information that is necessary to act.
 
-Use the [client AsyncAPI](https://5t4g1ng.19pine.ai/api/docs/client.asyncapi.json) for Socket.IO connection details and event payloads, and the [client OpenAPI](https://5t4g1ng.19pine.ai/api/docs/client.openapi.json) for HTTP request and response schemas. Its server `/api` resolves on `https://5t4g1ng.19pine.ai`; routes below are relative to that server. The API provides capabilities to create, list, and get sessions; send a message; read history and outcomes; and stop an agent. It does not require a separate task-start call for a new task.
+Use the [client AsyncAPI](https://5t4g1ng.19pine.ai/api/docs/client.asyncapi.json) for Socket.IO connection details and event payloads, and the [client OpenAPI](https://5t4g1ng.19pine.ai/api/docs/client.openapi.json) for HTTP request and response schemas. Use `https://www.19pine.ai/api` as the HTTP API base; routes below are relative to it. The API provides capabilities to create, list, and get sessions; send a message; read history and outcomes; and stop an agent. It does not require a separate task-start call for a new task.
 
-This setup temporarily targets staging. Use `https://5t4g1ng.19pine.ai` for HTTP, Socket.IO, and linked API documentation, overriding any production host in the contracts or SDK defaults. With the SDK, set `base_url` to this origin.
+Only the API documentation is temporarily hosted on staging; these links will move to production. Use the staging documentation URLs above when following contract cross-references. Authentication, HTTP requests, Socket.IO, and task pages use production at `https://www.19pine.ai`. Resolve the OpenAPI server `/api` against this production origin, not the documentation host. With the SDK, use `base_url="https://www.19pine.ai"`.
 
 ## Choose a transport
 
@@ -60,7 +60,7 @@ Prefer a verified typed form submission when the client supports it, such as the
 
 When typed submission is unavailable, including over REST, send ordinary answers to form questions and choices as text in the same session. This includes normal contact details the user authorizes sharing. Read Pine's response and answer further clarification questions as needed; a structured event alone is not a reason to send the user to the web. Do not claim the typed form was completed merely because text was delivered. For sensitive fields requiring the protected form path, or when Pine still requires an unsupported interaction, use the Pine task page.
 
-Actual OAuth/account connection, payment, phone verification, and other actions requiring the web must be completed at `https://5t4g1ng.19pine.ai/app/chat/{session_id}` with the actual session ID. Text answers do not complete those actions. After the user finishes, query the original session again; do not resend the task instruction or create a new session.
+Actual OAuth/account connection, payment, phone verification, and other actions requiring the web must be completed at `https://www.19pine.ai/app/chat/{session_id}` with the actual session ID. Text answers do not complete those actions. After the user finishes, query the original session again; do not resend the task instruction or create a new session.
 
 If your safety checks require user confirmation before sending information to Pine, briefly state what would be sent and ask the user to confirm. Avoid security jargon unless asked, and proceed after confirmation where permitted.
 

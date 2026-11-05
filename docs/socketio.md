@@ -4,7 +4,8 @@
 
 This page covers only part of the Socket.IO protocol. While you use Socket.IO,
 the server can also send events that this page does not describe. For the public connection and event contract, see the
-[client AsyncAPI (staging preview)](https://5t4g1ng.19pine.ai/api/docs/client.asyncapi.json).
+[client AsyncAPI](https://5t4g1ng.19pine.ai/api/docs/client.asyncapi.json).
+Only this documentation link temporarily uses staging; connections use production.
 The managed-user authentication guidance below still applies to partners.
 
 ## Connect

@@ -1,6 +1,6 @@
 # Set up Pine in Instinct
 
-This guide temporarily targets Pine staging at `https://5t4g1ng.19pine.ai`.
+Connect to Pine production at `https://www.19pine.ai`. Only the linked API documentation temporarily uses staging; its links will move to production.
 
 Read the [Pine skill](https://github.com/19PINE-AI/pine-assistant-python/blob/main/skills/pine/SKILL.md)
 and its references; retain that complete link for future conversations if you
