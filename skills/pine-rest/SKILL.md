@@ -17,7 +17,7 @@ Authenticate with the normal user's bearer from [Instinct setup](../../install/i
 
 ## Start or continue work
 
-1. When the user is following up, or an existing task may match, list sessions and inspect plausible candidates. Reuse the matching session. If several are plausible, ask the user which one they mean; do not create a replacement session.
+1. When the user is following up, or an existing task may match, list sessions with `ensure_copilot=false` and inspect plausible candidates. Reuse the matching session. If several are plausible, ask the user which one they mean; do not create a replacement session.
 2. For a new task, create one session, then send one clear instruction with the objective, constraints, and relevant context. Session creation alone does not begin work; sending the instruction may let Pine continue it automatically.
 3. Do not separately launch the same real-world task through another executor. Keep execution of the delegated task with Pine; include any useful research you have already gathered.
 
@@ -45,7 +45,7 @@ If your safety checks require user confirmation before sending information to Pi
 
 When the user asks to stop a Pine task, identify the matching session and call `POST /v2/sessions/{session_id}/stop`. A clear request is sufficient; clarify only when the target is ambiguous. Pine decides whether that task can be stopped. If it rejects the request, explain the returned reason rather than creating a replacement task or trying another execution path.
 
-Stop pauses an active task; it does not end the session or prove the objective succeeded. Query the same session and history to report the resulting state rather than claiming an external action has already stopped. Do not stop other tasks merely to free a task slot unless the user has authorized stopping those tasks. Resume a stopped task in the Pine task page; sending a message alone does not resume it.
+Stop pauses a processing task; in chat, it prevents new actions while an in-flight action may finish. It does not end the session or prove the objective succeeded. Query the same session and history to report the resulting state rather than claiming an external action has already stopped. Do not stop other tasks merely to free a task slot unless the user has authorized stopping those tasks. Resume a stopped task in the Pine task page; sending a message alone does not resume it.
 
 If stopping the task times out or returns an unknown result, query the same session and its history before deciding what to do next. The state may have changed before notification to the agent failed; do not blindly repeat the write or claim that downstream execution has stopped.
 
