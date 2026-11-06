@@ -52,7 +52,7 @@ With REST, retrieve subsequent progress through history reads and schedule check
 
 Use Pine's latest reply and current progress to estimate when the next update is likely. Without a clear timing signal, check again in about 30 seconds; extend the interval when there is reason to expect progress to take longer. Reassess after every read rather than keeping one interval for the whole task or waiting progressively longer just because no new message has appeared.
 
-If Pine gives a specific future time to continue, schedule the next check around that time instead of polling throughout the wait. If timed wake-ups are available, set a one-time check; otherwise, explain that you cannot follow up automatically at that time. When user input or action is needed, relay the request and pause checks until the user responds or completes the action; stop checking when the task finishes.
+If Pine gives a specific future time to continue, schedule the next check around that time instead of polling throughout the wait. If timed wake-ups are available, set a one-time check; otherwise, explain that you cannot follow up automatically at that time. When Pine needs user input or action, relay the request and pause routine checks. Resume follow-up after sending the user's answer to Pine or when the user reports completing the action. If completion is uncertain, check the same session to confirm its status. Stop checking when the task finishes.
 
 If you have a wait tool, use it before another bounded query; do not promise updates after you stop checking. A later conversation can recover by listing sessions and reading the chosen session's history/outcomes.
 
