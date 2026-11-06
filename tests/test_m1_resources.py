@@ -4,7 +4,7 @@ import json
 import httpx
 import pytest
 
-from pine_assistant import AsyncPineAI, AuthError, PineAI, SessionError
+from pine_assistant import AsyncPineAI, AuthError, PineAI, PineAIError, SessionError
 
 
 def success(data):
@@ -541,3 +541,59 @@ async def test_upload_uses_multipart_content_type(tmp_path):
         access_token="user", base_url="https://pine.test", http_transport=httpx.MockTransport(handler),
     ) as client:
         assert await client.sessions.upload_attachment(str(attachment)) == []
+
+
+@pytest.mark.parametrize("message", [
+    "Insufficient credits. Please top up your account or subscribe to continue.",
+    None,
+    {"private": "unrelated data"},
+    "",
+    "   ",
+])
+def test_start_preserves_only_string_credit_explanations(message):
+    def handler(request):
+        assert request.method == "POST"
+        assert request.url.path == "/api/v2/sessions/7/start"
+        return httpx.Response(402, json={"status": "error", "error": {
+            "code": "credits_insufficient", "message": message, "details": {"private": "hidden"},
+        }})
+
+    with (
+        PineAI(base_url="https://pine.test", http_transport=httpx.MockTransport(handler)) as client,
+        pytest.raises(PineAIError) as error,
+    ):
+        client.sessions.start_task("7")
+    assert error.value.code == "credits_insufficient"
+    assert error.value.status_code == 402
+    assert str(error.value) == (message if isinstance(message, str) and message.strip() else "Pine API request failed with HTTP 402")
+    assert error.value.details is None
+
+
+@pytest.mark.asyncio
+async def test_async_start_preserves_credit_explanation():
+    message = "Insufficient credits. Please top up your account or subscribe to continue."
+
+    def handler(request):
+        assert request.url.path == "/api/v2/sessions/7/start"
+        return httpx.Response(402, json={"status": "error", "error": {
+            "code": "credits_insufficient", "message": message,
+        }})
+
+    async with AsyncPineAI(base_url="https://pine.test", http_transport=httpx.MockTransport(handler)) as client:
+        with pytest.raises(PineAIError, match="Insufficient credits") as error:
+            await client.sessions.start_task("7")
+    assert str(error.value) == message
+    assert error.value.status_code == 402
+
+
+@pytest.mark.parametrize("status,code", [(402, "other_error"), (500, "credits_insufficient")])
+def test_start_does_not_expose_other_http_error_messages(status, code):
+    def handler(_request):
+        return httpx.Response(status, json={"error": {"code": code, "message": "private upstream content"}})
+
+    with (
+        PineAI(base_url="https://pine.test", http_transport=httpx.MockTransport(handler)) as client,
+        pytest.raises(PineAIError) as error,
+    ):
+        client.sessions.start_task("7")
+    assert str(error.value) == f"Pine API request failed with HTTP {status}"
