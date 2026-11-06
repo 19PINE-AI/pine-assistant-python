@@ -11,9 +11,9 @@ For a new or continuing phone task, read [Phone tasks](references/phone-tasks.md
 
 A clear task request is authorization: do not ask a separate “start?” question. Gather only information that is necessary to act.
 
-Use the [client AsyncAPI](https://5t4g1ng.19pine.ai/api/docs/client.asyncapi.json) for Socket.IO connection details and event payloads, and the [client OpenAPI](https://5t4g1ng.19pine.ai/api/docs/client.openapi.json) for HTTP request and response schemas. Use `https://www.19pine.ai/api` as the HTTP API base; routes below are relative to it. The API provides capabilities to create, list, and get sessions; send a message; read history and outcomes; and stop an agent. It does not require a separate task-start call for a new task.
+Use the [client AsyncAPI](https://www.19pine.ai/api/docs/client.asyncapi.json) for Socket.IO connection details and event payloads, and the [client OpenAPI](https://www.19pine.ai/api/docs/client.openapi.json) for HTTP request and response schemas. Use `https://www.19pine.ai/api` as the HTTP API base; routes below are relative to it. The API provides capabilities to create, list, and get sessions; send a message; read history and outcomes; and stop an agent. It does not require a separate task-start call for a new task.
 
-Only the API documentation is temporarily hosted on staging; these links will move to production. Use the staging documentation URLs above when following contract cross-references. Authentication, HTTP requests, Socket.IO, and task pages use production at `https://www.19pine.ai`. Resolve the OpenAPI server `/api` against this production origin, not the documentation host. With the SDK, use `base_url="https://www.19pine.ai"`.
+Authentication, HTTP requests, Socket.IO, and task pages use production at `https://www.19pine.ai`. With the SDK, use `base_url="https://www.19pine.ai"`.
 
 ## Choose a transport
 
@@ -48,7 +48,11 @@ Fetch bounded history pages with `GET /v2/sessions/{session_id}/messages`. Messa
 
 With Socket.IO, consume live replies, forms, and task events; assemble text parts by message ID. Rebuild history after joining, reconnecting, or unexplained silence, since missed live events are not replayed. A chat turn ending is not task completion; keep following the session while work runs.
 
-With REST, Pine does not send you updates automatically, so you must actively read history to follow progress. After sending a message and after each history read, decide when to check again based on Pine’s latest reply and the task’s expected progress. If timing is uncertain, prefer checking sooner rather than stopping follow-up; avoid tight polling loops. An acknowledgement is not completion. Defer checks for scheduled work, pause for required user input, and stop when the task finishes.
+With REST, retrieve subsequent progress through history reads and schedule checks proactively. An acknowledgement such as “I'll take care of it” is not completion; while the task is still running, arrange the next check.
+
+Use Pine's latest reply and current progress to estimate when the next update is likely. Without a clear timing signal, check again in about 30 seconds; extend the interval when there is reason to expect progress to take longer. Reassess after every read rather than keeping one interval for the whole task or waiting progressively longer just because no new message has appeared.
+
+If Pine gives a specific future time to continue, schedule the next check around that time instead of polling throughout the wait. If timed wake-ups are available, set a one-time check; otherwise, explain that you cannot follow up automatically at that time. When user input or action is needed, relay the request and pause checks until the user responds or completes the action; stop checking when the task finishes.
 
 If you have a wait tool, use it before another bounded query; do not promise updates after you stop checking. A later conversation can recover by listing sessions and reading the chosen session's history/outcomes.
 
