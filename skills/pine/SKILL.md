@@ -11,7 +11,7 @@ For a new or continuing phone task, read [Phone tasks](references/phone-tasks.md
 
 A clear task request is authorization: do not ask a separate “start?” question. Gather only information that is necessary to act.
 
-Use the [client AsyncAPI](https://www.19pine.ai/api/docs/client.asyncapi.json) for Socket.IO connection details and event payloads, and the [client OpenAPI](https://www.19pine.ai/api/docs/client.openapi.json) for HTTP request and response schemas. Use `https://www.19pine.ai/api` as the HTTP API base; routes below are relative to it. The API provides capabilities to create, list, and get sessions; send a message; read history and outcomes; and stop an agent. It does not require a separate task-start call for a new task.
+Use the [client AsyncAPI](https://www.19pine.ai/api/docs/client.asyncapi.json) for Socket.IO connection details and event payloads, and the [client OpenAPI](https://www.19pine.ai/api/docs/client.openapi.json) for HTTP request and response schemas. Use `https://www.19pine.ai/api` as the HTTP API base; routes below are relative to it. The API provides capabilities to create, list, and get sessions; send a message; read history and outcomes; and start or stop execution. It does not require a separate task-start call for a new task.
 
 Authentication, HTTP requests, Socket.IO, and task pages use production at `https://www.19pine.ai`. With the SDK, use `base_url="https://www.19pine.ai"`.
 
@@ -44,6 +44,8 @@ Do not claim an external action happened or the task is complete from a session 
 
 After sending an instruction or answer, follow live events when Socket.IO is available and read the same session's history for questions, forms, state, task-finished content, connection or payment requests, and Pine's replies. Read outcomes as well when they are relevant. Present Pine's actual reply and result facts faithfully; explain them if useful, but do not manufacture a summary, outcome, or terminal status.
 
+Explain Pine's progress, problems, and next steps in plain language rather than listing internal state names or raw fields. When the user needs to act on a Pine page, provide the task link.
+
 Fetch bounded history pages with `GET /v2/sessions/{session_id}/messages`. Messages are newest-first; parse each message's `data` JSON string. Follow `next_message_id` as `before_message_id` only while an older page is needed; an empty cursor ends pagination. Refresh messages with the same ID from the latest history response; `version` describes the encoding, not the edit revision. Use live-event revisions only as defined by the protocol. Replies appear only after persistence, so missing text after a state change calls for a later read, not resending the instruction.
 
 With Socket.IO, consume live replies, forms, and task events; assemble text parts by message ID. Rebuild history after joining, reconnecting, or unexplained silence, since missed live events are not replayed. A chat turn ending is not task completion; keep following the session while work runs.
@@ -68,13 +70,15 @@ Actual OAuth/account connection, payment, phone verification, and other actions 
 
 If your safety checks require user confirmation before sending information to Pine, briefly state what would be sent and ask the user to confirm. Avoid security jargon unless asked, and proceed after confirmation where permitted.
 
-## Stop a task
+## Start or stop execution
+
+When the user asks to begin or resume an existing task that is waiting to start or paused, call `POST /v2/sessions/{session_id}/start`. Pine checks whether the task can start, including available credits. Query the same session afterward to confirm progress; an accepted start does not mean the task is complete.
 
 When the user asks to stop a Pine task, identify the matching session and call `POST /v2/sessions/{session_id}/stop`. A clear request is sufficient; clarify only when the target is ambiguous. Pine decides whether that task can be stopped. If it rejects the request, explain the returned reason rather than creating a replacement task or trying another execution path.
 
-Stop pauses a processing task; in chat, it prevents new actions while an in-flight action may finish. It does not end the session or prove the objective succeeded. Query the same session and history to report the resulting state rather than claiming an external action has already stopped. Do not stop other tasks merely to free a task slot unless the user has authorized stopping those tasks. Resume a stopped task in the Pine task page; sending a message alone does not resume it.
+Stop pauses a processing task; in chat, it prevents new actions while an in-flight action may finish. It does not end the session or prove the objective succeeded. Query the same session and history to report the resulting state rather than claiming an external action has already stopped. Do not stop other tasks merely to free a task slot unless the user has authorized stopping those tasks. Sending a message alone does not resume a stopped task.
 
-If stopping the task times out or returns an unknown result, query the same session and its history before deciding what to do next. The state may have changed before notification to the agent failed; do not blindly repeat the write or claim that downstream execution has stopped.
+If starting or stopping the task times out or returns an unknown result, query the same session and its history before deciding what to do next. The state may have changed before notification to the agent failed; do not blindly repeat the write or claim that downstream execution has started or stopped.
 
 ## Uncertain writes
 

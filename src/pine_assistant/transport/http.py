@@ -77,11 +77,26 @@ def _input_state_details(response: httpx.Response) -> dict[str, Any] | None:
     return {"input_state": input_state}
 
 
+def _error_message(response: httpx.Response) -> str:
+    """Preserve the public credit explanation without exposing other error bodies."""
+    if response.status_code == 402:
+        try:
+            payload = response.json()
+        except (ValueError, TypeError):
+            payload = None
+        error = payload.get("error") if isinstance(payload, dict) else None
+        if isinstance(error, dict) and error.get("code") == "credits_insufficient":
+            message = error.get("message")
+            if isinstance(message, str) and message.strip():
+                return message
+    return f"Pine API request failed with HTTP {response.status_code}"
+
+
 def _json_data(response: httpx.Response) -> Any:
     if not 200 <= response.status_code < 300:
         raise PineAIError(
             _error_code(response),
-            f"Pine API request failed with HTTP {response.status_code}",
+            _error_message(response),
             _input_state_details(response),
             status_code=response.status_code,
         )
