@@ -15,6 +15,7 @@ from pine_assistant.errors import PineAIError, SessionError
 from pine_assistant.models.session import (
     AIDisclosure,
     CallerID,
+    RecordingDisclosure,
     SessionConfig,
     SessionHistoryPage,
     SessionInfo,
@@ -63,18 +64,18 @@ class _Unset(Enum):
 def _config_update(
     caller_id: CallerID | _Unset,
     ai_disclosure: AIDisclosure | _Unset,
-    recording_disclosure: bool | _Unset,
+    recording_disclosure: RecordingDisclosure | _Unset,
 ) -> dict[str, Any]:
     body: dict[str, Any] = {}
     if caller_id is not _Unset.VALUE:
         body["caller_id"] = _caller_id(caller_id)
     if ai_disclosure is not _Unset.VALUE:
         if ai_disclosure not in get_args(AIDisclosure):
-            raise ValueError('ai_disclosure must be "off", "on_request" or "proactive"')
+            raise ValueError('ai_disclosure must be "disabled", "on_request" or "proactive"')
         body["ai_disclosure"] = ai_disclosure
     if recording_disclosure is not _Unset.VALUE:
-        if not isinstance(recording_disclosure, bool):
-            raise ValueError("recording_disclosure must be a boolean")
+        if recording_disclosure not in get_args(RecordingDisclosure):
+            raise ValueError('recording_disclosure must be "disabled" or "proactive"')
         body["recording_disclosure"] = recording_disclosure
     if not body:
         raise ValueError("provide at least one session config setting")
@@ -214,23 +215,27 @@ class SessionsAPI:
         *,
         caller_id: CallerID | _Unset = _Unset.VALUE,
         ai_disclosure: AIDisclosure | _Unset = _Unset.VALUE,
-        recording_disclosure: bool | _Unset = _Unset.VALUE,
+        recording_disclosure: RecordingDisclosure | _Unset = _Unset.VALUE,
     ) -> SessionConfig:
         """Update settings for the next calls the agent places in this session.
 
-        Omitted fields stay unchanged; explicit None is invalid. Managed users
-        default to proactive AI disclosure and recording disclosure enabled.
-        Set ai_disclosure="on_request" to disclose AI identity only when asked.
-        The server decides which modes a user may set and rejects "off" for
-        managed users with 400 ``invalid_request``. recording_disclosure=False disables
-        the spoken notice, not recording. Calls already placed keep their settings.
+        Omitted fields stay unchanged; explicit None is invalid. Calls already
+        placed keep their settings. A 503 ``session_config_push_failed`` means
+        the value is saved but delivery to the running agent was not confirmed;
+        send the same value again.
 
-        ``"user"``, or not set, presents the user's assistant number if it has
-        one, else the user's phone, else a number of the platform's pool;
-        ``"platform"`` presents a number of the platform's pool. Set it at any
-        time: the agent uses the value for its next call. A 503
-        ``session_config_push_failed`` means the value is saved but delivery to
-        the running agent was not confirmed; send the same value again.
+        caller_id selects the number the call shows. ``"user"``, or not set,
+        presents the user's assistant number if it has one, else the user's
+        phone, else a number of the platform's pool; ``"platform"`` presents a
+        number of the platform's pool.
+
+        ai_disclosure and recording_disclosure control what the assistant says
+        on the call. Managed users default to ``"proactive"`` for both and the
+        server rejects ai_disclosure="disabled" for them with 400
+        ``invalid_request``; the server decides which modes a user may set.
+        ai_disclosure="on_request" discloses AI identity only when asked.
+        recording_disclosure="disabled" turns off the spoken notice, not
+        recording.
         """
         body = _config_update(caller_id, ai_disclosure, recording_disclosure)
         try:
@@ -409,7 +414,7 @@ class SyncSessionsAPI:
         *,
         caller_id: CallerID | _Unset = _Unset.VALUE,
         ai_disclosure: AIDisclosure | _Unset = _Unset.VALUE,
-        recording_disclosure: bool | _Unset = _Unset.VALUE,
+        recording_disclosure: RecordingDisclosure | _Unset = _Unset.VALUE,
     ) -> SessionConfig:
         """Update next-call settings; see :meth:`SessionsAPI.update_config` for semantics."""
         body = _config_update(caller_id, ai_disclosure, recording_disclosure)

@@ -174,32 +174,43 @@ await client.sessions.send_message(session["id"], "Call the clinic to book a vis
 
 ### Call disclosures
 
-Managed-user sessions default to `ai_disclosure="proactive"` and
-`recording_disclosure=True`. `"proactive"` makes the assistant introduce itself
-as AI; `"on_request"` makes it disclose that identity when asked; `"off"`
-disables AI disclosure. The server decides which modes a user may set: it
-rejects `"off"` for managed users with 400 `invalid_request`. Pine's own users
-default to `"off"` and `False`.
+Two settings control what the assistant says on a call:
+
+| Setting | Values |
+|---|---|
+| `ai_disclosure` | `"proactive"` (introduce itself as AI), `"on_request"` (disclose that identity when asked), `"disabled"` |
+| `recording_disclosure` | `"proactive"` (announce that the call is recorded), `"disabled"` |
+
+Managed-user sessions default to `"proactive"` for both. Pine test accounts
+default to `"disabled"` for both. The server decides which modes a user may
+set: it rejects `ai_disclosure="disabled"` for managed users with 400
+`invalid_request`.
+
+These settings require a server with session disclosure support. An older
+server may silently accept them for test accounts without applying them.
 
 ```python
 session = await client.sessions.create()
 config = await client.sessions.update_config(
-    session["id"], ai_disclosure="on_request", recording_disclosure=False,
+    session["id"], ai_disclosure="on_request", recording_disclosure="disabled",
 )
 await client.sessions.send_message(session["id"], "Call the clinic to book a visit")
 ```
 
 Both `AsyncPineAI` and `PineAI` support these settings. Supply at least one
-setting. Omitted settings stay unchanged; `None`, unknown modes and non-boolean
-recording values raise `ValueError` before any request is sent. Setting
-`recording_disclosure=False` disables the spoken recording notice, not recording.
+setting. Omitted settings stay unchanged; `None`, non-strings and unknown modes
+raise `ValueError` before any request is sent. Setting
+`recording_disclosure="disabled"` turns off the spoken recording notice, not
+recording.
 Changes affect subsequent calls; calls already placed keep their settings.
 The same 503 `session_config_push_failed` behavior described above applies.
 
 `sessions.get_config()` returns the effective disclosure values from the server.
-Both disclosure fields are `None` when an older server omits them. The SDK does
-not choose product defaults locally. `AIDisclosure`, exported from
-`pine_assistant`, types the three modes accepted by `update_config()`.
+Both disclosure fields are `None` when an older server omits them. They are
+read as plain strings, so a mode added later by the server still parses. The
+SDK does not choose product defaults locally. `AIDisclosure` and
+`RecordingDisclosure`, exported from `pine_assistant`, type the modes accepted
+by `update_config()`.
 
 ### The user's time
 
@@ -283,8 +294,8 @@ from `auth.*`, and `SessionError` from `sessions.list`, `get`, `get_config`,
 | 429 | `too_many_requests` | Too many requests. |
 
 `SessionError` from `sessions.get_config()` and `update_config()`: 400
-`invalid_request` when the server rejects a value (for example `"off"` for a
-managed user), 403 `forbidden` when the user may not use the config API, and
+`invalid_request` when the server rejects a value (for example
+`ai_disclosure="disabled"` for a managed user), 403 `forbidden` when the user may not use the config API, and
 503 `session_config_push_failed` (see "Caller ID").
 
 The codes for managed users are listed in [docs/http-api.md](http-api.md).

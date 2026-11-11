@@ -7,15 +7,17 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Added
+### New
 
 - Session call disclosures on both async and sync clients:
-  `sessions.update_config(ai_disclosure="on_request", recording_disclosure=False)`.
+  `sessions.update_config(ai_disclosure="on_request", recording_disclosure="disabled")`.
   Each setting, including `caller_id`, may be updated independently. Omitted
-  fields stay unchanged; `None` and invalid values are rejected before sending.
+  fields stay unchanged; `None` and unknown values are rejected before sending.
+  Requires a server with session disclosure support; an older server may
+  silently accept these settings for test accounts without applying them.
 - `SessionConfig` reads effective AI and recording disclosure values, and the
-  public `AIDisclosure` type describes the disclosure modes. The server decides
-  which modes a user may set.
+  public `AIDisclosure` and `RecordingDisclosure` types describe the modes. The
+  server decides which modes a user may set.
 
 ## [0.5.0rc4] - 2026-10-23
 

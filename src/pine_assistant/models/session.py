@@ -4,10 +4,11 @@ Session models — the REST session object.
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, StrictBool, field_validator
+from pydantic import BaseModel, ConfigDict, StrictStr, field_validator
 
 CallerID = Literal["user", "platform"]
-AIDisclosure = Literal["off", "on_request", "proactive"]
+AIDisclosure = Literal["disabled", "on_request", "proactive"]
+RecordingDisclosure = Literal["disabled", "proactive"]
 
 
 class SessionInfo(BaseModel):
@@ -41,9 +42,10 @@ class SessionConfig(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     caller_id: str | None = None
-    # Missing values preserve compatibility with servers predating disclosure settings.
-    ai_disclosure: str | None = None
-    recording_disclosure: StrictBool | None = None
+    # None means a server predating disclosure settings. Both are plain strings,
+    # not the update Literals, on purpose: a mode added by the server still parses.
+    ai_disclosure: StrictStr | None = None
+    recording_disclosure: StrictStr | None = None
 
 
 class SessionListResponse(BaseModel):

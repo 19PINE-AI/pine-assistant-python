@@ -215,20 +215,23 @@ The config API accepts these additional fields:
 
 | Field | Values | Default |
 |---|---|---|
-| `ai_disclosure` | `"proactive"` (introduce as AI), `"on_request"` (disclose when asked), `"off"` (no AI disclosure) | `"proactive"` for managed users |
-| `recording_disclosure` | JSON `true` or `false` | `true` for managed users |
+| `ai_disclosure` | `"proactive"` (introduce as AI), `"on_request"` (disclose when asked), `"disabled"` | `"proactive"` for managed users |
+| `recording_disclosure` | `"proactive"` (announce that the call is recorded), `"disabled"` | `"proactive"` for managed users |
 
 For example, `PUT /v2/sessions/{id}/config` with
-`{"ai_disclosure": "on_request", "recording_disclosure": false}` changes both.
+`{"ai_disclosure": "on_request", "recording_disclosure": "disabled"}` changes both.
 Omitted fields stay unchanged; `null` is invalid. Recording disclosure controls
 the spoken notice, not whether the call is recorded. Changes affect subsequent
 calls; calls already placed keep their settings. The same 503 push-failure
 behavior described above applies.
 
-`GET` returns the effective disclosure values, including defaults. Pine's own
-users default to `"off"` and `false`. The server decides which modes a user may
-set: managed users cannot set `ai_disclosure="off"`, and the request returns 400
-`invalid_request`.
+`GET` returns the effective disclosure values, including defaults. Pine test
+accounts default to `"disabled"` for both. The server decides which modes a user
+may set: managed users cannot set `ai_disclosure="disabled"`, and the request
+returns 400 `invalid_request`.
+
+These fields require a server with session disclosure support. An older server
+may silently accept them for test accounts without applying them.
 
 ### The user's time
 

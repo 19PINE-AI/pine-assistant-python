@@ -372,14 +372,14 @@ def test_socketio_message_carries_client_now_date_only_when_given():
 @pytest.mark.parametrize("settings", [
     {"ai_disclosure": "proactive"},
     {"ai_disclosure": "on_request"},
-    {"ai_disclosure": "off"},
-    {"recording_disclosure": False},
-    {"recording_disclosure": True},
-    {"caller_id": "platform", "ai_disclosure": "on_request", "recording_disclosure": False},
+    {"ai_disclosure": "disabled"},
+    {"recording_disclosure": "disabled"},
+    {"recording_disclosure": "proactive"},
+    {"caller_id": "platform", "ai_disclosure": "on_request", "recording_disclosure": "disabled"},
 ])
-async def test_disclosure_update_preserves_false_and_omits_unprovided_fields(sync, settings):
+async def test_disclosure_update_sends_only_provided_fields(sync, settings):
     # The server always answers with both effective disclosure values.
-    effective = {"caller_id": "platform", "ai_disclosure": "proactive", "recording_disclosure": True}
+    effective = {"caller_id": "platform", "ai_disclosure": "proactive", "recording_disclosure": "proactive"}
     recorder = Recorder(httpx.Response(200, json=success(effective)))
     if sync:
         with PineAI(
@@ -400,15 +400,15 @@ async def test_disclosure_update_preserves_false_and_omits_unprovided_fields(syn
 @pytest.mark.parametrize("sync", [False, True])
 @pytest.mark.parametrize("settings", [
     {},
-    {"caller_id": None},
     {"ai_disclosure": None},
+    {"ai_disclosure": "off"},
     {"ai_disclosure": "PROACTIVE"},
-    {"ai_disclosure": "unknown"},
     {"ai_disclosure": True},
     {"recording_disclosure": None},
-    {"recording_disclosure": "false"},
+    {"recording_disclosure": "on_request"},
+    {"recording_disclosure": False},
+    {"recording_disclosure": True},
     {"recording_disclosure": 0},
-    {"recording_disclosure": 1},
 ])
 async def test_invalid_disclosure_update_never_sends_request(sync, settings):
     recorder = Recorder()
@@ -433,21 +433,22 @@ async def test_server_rejection_of_disclosure_mode_surfaces_as_session_error(syn
         with PineAI(
             api_key=API_KEY, user_id=PINE_USER_ID, base_url=BASE_URL, http_transport=httpx.MockTransport(recorder),
         ) as client, pytest.raises(SessionError) as excinfo:
-            client.sessions.update_config(7, ai_disclosure="off")
+            client.sessions.update_config(7, ai_disclosure="disabled")
     else:
         async with async_client(recorder, user_id=PINE_USER_ID) as client:
             with pytest.raises(SessionError) as excinfo:
-                await client.sessions.update_config(7, ai_disclosure="off")
+                await client.sessions.update_config(7, ai_disclosure="disabled")
 
     assert (excinfo.value.code, excinfo.value.status_code) == ("invalid_request", 400)
-    assert recorder.body() == {"ai_disclosure": "off"}
+    assert recorder.body() == {"ai_disclosure": "disabled"}
 
 
 @pytest.mark.parametrize("sync", [False, True])
 @pytest.mark.parametrize("payload", [
-    {"ai_disclosure": "proactive", "recording_disclosure": True},
-    {"ai_disclosure": "on_request", "recording_disclosure": False},
-    {"ai_disclosure": "off", "recording_disclosure": False},
+    {"ai_disclosure": "proactive", "recording_disclosure": "proactive"},
+    {"ai_disclosure": "on_request", "recording_disclosure": "disabled"},
+    {"ai_disclosure": "disabled", "recording_disclosure": "disabled"},
+    {"ai_disclosure": "a_future_mode", "recording_disclosure": "a_future_mode"},
     {},
 ])
 async def test_read_disclosure_config_and_older_servers(sync, payload):
@@ -461,12 +462,13 @@ async def test_read_disclosure_config_and_older_servers(sync, payload):
         async with async_client(recorder, user_id=PINE_USER_ID) as client:
             config = await client.sessions.get_config(7)
     assert config.ai_disclosure == payload.get("ai_disclosure")
-    assert config.recording_disclosure is payload.get("recording_disclosure")
+    assert config.recording_disclosure == payload.get("recording_disclosure")
 
 
-@pytest.mark.parametrize("recording_disclosure", ["false", 0, 1])
-async def test_malformed_disclosure_response_is_not_coerced(recording_disclosure):
-    recorder = Recorder(httpx.Response(200, json=success({"recording_disclosure": recording_disclosure})))
+@pytest.mark.parametrize("field", ["ai_disclosure", "recording_disclosure"])
+@pytest.mark.parametrize("value", [True, 0, 1])
+async def test_malformed_disclosure_response_is_not_coerced(field, value):
+    recorder = Recorder(httpx.Response(200, json=success({field: value})))
     async with async_client(recorder, user_id=PINE_USER_ID) as client:
         with pytest.raises(SessionError, match="invalid session config response"):
             await client.sessions.get_config(7)
