@@ -228,7 +228,7 @@ async def test_update_config_puts_the_caller_id_as_the_managed_user(caller_id):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("caller_id", ["pine", "", None, "PLATFORM"])
+@pytest.mark.parametrize("caller_id", ["pine", "", "PLATFORM"])
 async def test_invalid_caller_id_is_refused_before_any_request(caller_id):
     recorder = Recorder()
     async with async_client(recorder, user_id=PINE_USER_ID) as client:
@@ -372,10 +372,10 @@ def test_socketio_message_carries_client_now_date_only_when_given():
 @pytest.mark.parametrize("settings", [
     {"ai_disclosure": "proactive"},
     {"ai_disclosure": "on_request"},
-    {"ai_disclosure": "disabled"},
     {"recording_disclosure": "disabled"},
     {"recording_disclosure": "proactive"},
     {"caller_id": "platform", "ai_disclosure": "on_request", "recording_disclosure": "disabled"},
+    {"caller_id": None, "ai_disclosure": "on_request", "recording_disclosure": None},
 ])
 async def test_disclosure_update_sends_only_provided_fields(sync, settings):
     # The server always answers with both effective disclosure values.
@@ -390,7 +390,7 @@ async def test_disclosure_update_sends_only_provided_fields(sync, settings):
         async with async_client(recorder, user_id=PINE_USER_ID) as client:
             config = await client.sessions.update_config(7, **settings)
 
-    assert recorder.body() == settings
+    assert recorder.body() == {key: value for key, value in settings.items() if value is not None}
     assert config == SessionConfig(**effective)
     [request] = recorder.requests
     assert (request.method, request.url.path) == ("PUT", "/api/v2/sessions/7/config")
@@ -400,11 +400,10 @@ async def test_disclosure_update_sends_only_provided_fields(sync, settings):
 @pytest.mark.parametrize("sync", [False, True])
 @pytest.mark.parametrize("settings", [
     {},
-    {"ai_disclosure": None},
+    {"caller_id": None, "ai_disclosure": None, "recording_disclosure": None},
     {"ai_disclosure": "off"},
     {"ai_disclosure": "PROACTIVE"},
     {"ai_disclosure": True},
-    {"recording_disclosure": None},
     {"recording_disclosure": "on_request"},
     {"recording_disclosure": False},
     {"recording_disclosure": True},

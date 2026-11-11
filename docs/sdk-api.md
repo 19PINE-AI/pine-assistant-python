@@ -122,7 +122,7 @@ user = await partner_client.platform.managed_users.update(
 | `sessions.list(...)` | `SessionListResponse` |
 | `sessions.get(session_id)` | `SessionInfo` |
 | `sessions.get_config(session_id)` | `SessionConfig` |
-| `sessions.update_config(session_id, *, caller_id=…, ai_disclosure=…, recording_disclosure=…)` | `SessionConfig` after the change |
+| `sessions.update_config(session_id, *, caller_id=None, ai_disclosure=None, recording_disclosure=None)` | `SessionConfig` after the change |
 | `sessions.send_message(session_id, content, ..., client_now_date=None)` | `SessionMessageStatus` |
 | `sessions.history(session_id, *, limit=30, before_message_id=None)` | `SessionHistoryPage`: one page of stored messages, newest first |
 | `sessions.start_task(session_id)` | `dict` |
@@ -163,7 +163,8 @@ caller ID. `caller_id` is a session setting that selects it:
 - `caller_id` does not change how the agent reaches the user. The agent still
   uses the user's phone for that.
 - A 503 `session_config_push_failed` means that the value is saved, but delivery to
-  the running agent was not confirmed. Send the same value again.
+  the running agent was not confirmed. Send the same value again. A 500 means
+  that the change was not saved.
 - Any other value raises `ValueError` before any request is sent.
 
 ```python
@@ -197,13 +198,14 @@ config = await client.sessions.update_config(
 await client.sessions.send_message(session["id"], "Call the clinic to book a visit")
 ```
 
-Both `AsyncPineAI` and `PineAI` support these settings. Supply at least one
-setting. Omitted settings stay unchanged; `None`, non-strings and unknown modes
-raise `ValueError` before any request is sent. Setting
+Both `AsyncPineAI` and `PineAI` support these settings. `update_config()`
+changes only the settings given; `None` leaves a setting unchanged and is not
+sent. A call with no setting to change, a non-string or an unknown mode raises
+`ValueError` before any request is sent. Setting
 `recording_disclosure="disabled"` turns off the spoken recording notice, not
 recording.
 Changes affect subsequent calls; calls already placed keep their settings.
-The same 503 `session_config_push_failed` behavior described above applies.
+The same 503 and 500 behavior described above applies.
 
 `sessions.get_config()` returns the effective disclosure values from the server.
 Both disclosure fields are `None` when an older server omits them. They are
@@ -295,8 +297,9 @@ from `auth.*`, and `SessionError` from `sessions.list`, `get`, `get_config`,
 
 `SessionError` from `sessions.get_config()` and `update_config()`: 400
 `invalid_request` when the server rejects a value (for example
-`ai_disclosure="disabled"` for a managed user), 403 `forbidden` when the user may not use the config API, and
-503 `session_config_push_failed` (see "Caller ID").
+`ai_disclosure="disabled"` for a managed user), 403 `forbidden` when the user
+may not use the config API, 503 `session_config_push_failed` when the change is
+saved but not delivered, and 500 when it was not saved (see "Caller ID").
 
 The codes for managed users are listed in [docs/http-api.md](http-api.md).
 Error messages never contain the key, the `external_id` or the user ID.

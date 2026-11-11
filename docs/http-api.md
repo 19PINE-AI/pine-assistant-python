@@ -207,7 +207,8 @@ caller ID. `caller_id` is a session setting that selects it:
   uses the user's phone for that.
 - Invalid values or unsupported config keys return 400 `invalid_request`.
 - 503 `session_config_push_failed` means that the value is saved, but delivery to
-  the running agent was not confirmed. Send the same request again.
+  the running agent was not confirmed. Send the same request again. A 500 means
+  that the change was not saved.
 
 ### Call disclosures
 
@@ -222,8 +223,8 @@ For example, `PUT /v2/sessions/{id}/config` with
 `{"ai_disclosure": "on_request", "recording_disclosure": "disabled"}` changes both.
 Omitted fields stay unchanged; `null` is invalid. Recording disclosure controls
 the spoken notice, not whether the call is recorded. Changes affect subsequent
-calls; calls already placed keep their settings. The same 503 push-failure
-behavior described above applies.
+calls; calls already placed keep their settings. The same 503 and 500 behavior
+described above applies.
 
 `GET` returns the effective disclosure values, including defaults. Pine test
 accounts default to `"disabled"` for both. The server decides which modes a user

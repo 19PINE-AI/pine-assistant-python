@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from enum import Enum
 from typing import Any, get_args
 
 from pydantic import ValidationError
@@ -57,26 +56,30 @@ def _caller_id(caller_id: CallerID) -> CallerID:
     return caller_id
 
 
-class _Unset(Enum):
-    VALUE = "unset"
+def _ai_disclosure(ai_disclosure: AIDisclosure) -> AIDisclosure:
+    if ai_disclosure not in get_args(AIDisclosure):
+        raise ValueError('ai_disclosure must be "disabled", "on_request" or "proactive"')
+    return ai_disclosure
+
+
+def _recording_disclosure(recording_disclosure: RecordingDisclosure) -> RecordingDisclosure:
+    if recording_disclosure not in get_args(RecordingDisclosure):
+        raise ValueError('recording_disclosure must be "disabled" or "proactive"')
+    return recording_disclosure
 
 
 def _config_update(
-    caller_id: CallerID | _Unset,
-    ai_disclosure: AIDisclosure | _Unset,
-    recording_disclosure: RecordingDisclosure | _Unset,
+    caller_id: CallerID | None,
+    ai_disclosure: AIDisclosure | None,
+    recording_disclosure: RecordingDisclosure | None,
 ) -> dict[str, Any]:
     body: dict[str, Any] = {}
-    if caller_id is not _Unset.VALUE:
+    if caller_id is not None:
         body["caller_id"] = _caller_id(caller_id)
-    if ai_disclosure is not _Unset.VALUE:
-        if ai_disclosure not in get_args(AIDisclosure):
-            raise ValueError('ai_disclosure must be "disabled", "on_request" or "proactive"')
-        body["ai_disclosure"] = ai_disclosure
-    if recording_disclosure is not _Unset.VALUE:
-        if recording_disclosure not in get_args(RecordingDisclosure):
-            raise ValueError('recording_disclosure must be "disabled" or "proactive"')
-        body["recording_disclosure"] = recording_disclosure
+    if ai_disclosure is not None:
+        body["ai_disclosure"] = _ai_disclosure(ai_disclosure)
+    if recording_disclosure is not None:
+        body["recording_disclosure"] = _recording_disclosure(recording_disclosure)
     if not body:
         raise ValueError("provide at least one session config setting")
     return body
@@ -213,16 +216,17 @@ class SessionsAPI:
         self,
         session_id: str | int,
         *,
-        caller_id: CallerID | _Unset = _Unset.VALUE,
-        ai_disclosure: AIDisclosure | _Unset = _Unset.VALUE,
-        recording_disclosure: RecordingDisclosure | _Unset = _Unset.VALUE,
+        caller_id: CallerID | None = None,
+        ai_disclosure: AIDisclosure | None = None,
+        recording_disclosure: RecordingDisclosure | None = None,
     ) -> SessionConfig:
         """Update settings for the next calls the agent places in this session.
 
-        Omitted fields stay unchanged; explicit None is invalid. Calls already
-        placed keep their settings. A 503 ``session_config_push_failed`` means
-        the value is saved but delivery to the running agent was not confirmed;
-        send the same value again.
+        Change only the settings given; ``None`` leaves a setting unchanged.
+        Calls already placed keep their settings. A 503
+        ``session_config_push_failed`` means the value is saved but delivery to
+        the running agent was not confirmed; send the same value again. A 500
+        means the change was not saved.
 
         caller_id selects the number the call shows. ``"user"``, or not set,
         presents the user's assistant number if it has one, else the user's
@@ -412,9 +416,9 @@ class SyncSessionsAPI:
         self,
         session_id: str | int,
         *,
-        caller_id: CallerID | _Unset = _Unset.VALUE,
-        ai_disclosure: AIDisclosure | _Unset = _Unset.VALUE,
-        recording_disclosure: RecordingDisclosure | _Unset = _Unset.VALUE,
+        caller_id: CallerID | None = None,
+        ai_disclosure: AIDisclosure | None = None,
+        recording_disclosure: RecordingDisclosure | None = None,
     ) -> SessionConfig:
         """Update next-call settings; see :meth:`SessionsAPI.update_config` for semantics."""
         body = _config_update(caller_id, ai_disclosure, recording_disclosure)
