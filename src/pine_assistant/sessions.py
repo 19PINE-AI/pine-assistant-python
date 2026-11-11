@@ -228,8 +228,8 @@ class SessionsAPI:
         one, else the user's phone, else a number of the platform's pool;
         ``"platform"`` presents a number of the platform's pool. Set it at any
         time: the agent uses the value for its next call. A 503
-        ``session_config_push_failed`` means the value is saved but has not
-        reached the running agent yet; send the same value again.
+        ``session_config_push_failed`` means the value is saved but delivery to
+        the running agent was not confirmed; send the same value again.
         """
         body = _config_update(caller_id, ai_disclosure, recording_disclosure)
         try:

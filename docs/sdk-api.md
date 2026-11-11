@@ -162,8 +162,8 @@ caller ID. `caller_id` is a session setting that selects it:
   while the session is paused applies when the session resumes.
 - `caller_id` does not change how the agent reaches the user. The agent still
   uses the user's phone for that.
-- A 503 `session_config_push_failed` means that the value is saved, but the
-  running agent did not get it yet. Send the same value again.
+- A 503 `session_config_push_failed` means that the value is saved, but delivery to
+  the running agent was not confirmed. Send the same value again.
 - Any other value raises `ValueError` before any request is sent.
 
 ```python
