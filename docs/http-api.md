@@ -211,12 +211,12 @@ caller ID. `caller_id` is a session setting that selects it:
 
 ### Call disclosures
 
-The config API accepts these additional fields for managed users:
+The config API accepts these additional fields:
 
 | Field | Values | Default |
 |---|---|---|
-| `ai_disclosure` | `"proactive"` (introduce as AI), `"on_request"` (disclose when asked) | `"proactive"` |
-| `recording_disclosure` | JSON `true` or `false` | `true` |
+| `ai_disclosure` | `"proactive"` (introduce as AI), `"on_request"` (disclose when asked), `"off"` (no AI disclosure) | `"proactive"` for managed users |
+| `recording_disclosure` | JSON `true` or `false` | `true` for managed users |
 
 For example, `PUT /v2/sessions/{id}/config` with
 `{"ai_disclosure": "on_request", "recording_disclosure": false}` changes both.
@@ -226,8 +226,9 @@ calls; calls already placed keep their settings. The same 503 push-failure
 behavior described above applies.
 
 `GET` returns the effective disclosure values, including defaults. Pine's own
-users default to `"off"` and `false`; config API access restrictions remain
-unchanged. Managed users cannot set `ai_disclosure="off"`.
+users default to `"off"` and `false`. The server decides which modes a user may
+set: managed users cannot set `ai_disclosure="off"`, and the request returns 400
+`invalid_request`.
 
 ### The user's time
 

@@ -70,7 +70,7 @@ def _config_update(
         body["caller_id"] = _caller_id(caller_id)
     if ai_disclosure is not _Unset.VALUE:
         if ai_disclosure not in get_args(AIDisclosure):
-            raise ValueError('ai_disclosure must be "proactive" or "on_request"')
+            raise ValueError('ai_disclosure must be "off", "on_request" or "proactive"')
         body["ai_disclosure"] = ai_disclosure
     if recording_disclosure is not _Unset.VALUE:
         if not isinstance(recording_disclosure, bool):
@@ -220,8 +220,9 @@ class SessionsAPI:
 
         Omitted fields stay unchanged; explicit None is invalid. Managed users
         default to proactive AI disclosure and recording disclosure enabled.
-        Set ai_disclosure="on_request" to disclose AI identity only when asked;
-        "off" is not a managed-user setting. recording_disclosure=False disables
+        Set ai_disclosure="on_request" to disclose AI identity only when asked.
+        The server decides which modes a user may set and rejects "off" for
+        managed users with 400 ``invalid_request``. recording_disclosure=False disables
         the spoken notice, not recording. Calls already placed keep their settings.
 
         ``"user"``, or not set, presents the user's assistant number if it has

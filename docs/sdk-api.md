@@ -176,9 +176,10 @@ await client.sessions.send_message(session["id"], "Call the clinic to book a vis
 
 Managed-user sessions default to `ai_disclosure="proactive"` and
 `recording_disclosure=True`. `"proactive"` makes the assistant introduce itself
-as AI; `"on_request"` makes it disclose that identity when asked. Managed users
-cannot select `"off"`. Pine's own users default to `"off"` and `False`; this
-does not grant them access to the config API.
+as AI; `"on_request"` makes it disclose that identity when asked; `"off"`
+disables AI disclosure. The server decides which modes a user may set: it
+rejects `"off"` for managed users with 400 `invalid_request`. Pine's own users
+default to `"off"` and `False`.
 
 ```python
 session = await client.sessions.create()
@@ -189,17 +190,16 @@ await client.sessions.send_message(session["id"], "Call the clinic to book a vis
 ```
 
 Both `AsyncPineAI` and `PineAI` support these settings. Supply at least one
-setting. Omitted settings stay unchanged; `None`, invalid modes and non-boolean
+setting. Omitted settings stay unchanged; `None`, unknown modes and non-boolean
 recording values raise `ValueError` before any request is sent. Setting
 `recording_disclosure=False` disables the spoken recording notice, not recording.
 Changes affect subsequent calls; calls already placed keep their settings.
 The same 503 `session_config_push_failed` behavior described above applies.
 
 `sessions.get_config()` returns the effective disclosure values from the server.
-`SessionConfig.ai_disclosure` can also be `"off"` on reads; both disclosure
-fields are `None` when an older server omits them. The SDK does not choose
-product defaults locally. `AIDisclosure`, exported from `pine_assistant`, types
-the two modes accepted by `update_config()`.
+Both disclosure fields are `None` when an older server omits them. The SDK does
+not choose product defaults locally. `AIDisclosure`, exported from
+`pine_assistant`, types the three modes accepted by `update_config()`.
 
 ### The user's time
 
@@ -282,9 +282,10 @@ from `auth.*`, and `SessionError` from `sessions.list`, `get`, `get_config`,
 | 404 | `platform_managed_user_not_found` | No managed user of yours has this `external_id`. |
 | 429 | `too_many_requests` | Too many requests. |
 
-`SessionError` from `sessions.get_config()` and `update_config()`: 403
-`forbidden` when the client is neither a managed user nor a test account, and 503
-`session_config_push_failed` (see "Caller ID").
+`SessionError` from `sessions.get_config()` and `update_config()`: 400
+`invalid_request` when the server rejects a value (for example `"off"` for a
+managed user), 403 `forbidden` when the user may not use the config API, and
+503 `session_config_push_failed` (see "Caller ID").
 
 The codes for managed users are listed in [docs/http-api.md](http-api.md).
 Error messages never contain the key, the `external_id` or the user ID.

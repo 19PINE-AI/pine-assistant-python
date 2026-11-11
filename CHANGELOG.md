@@ -14,7 +14,8 @@ project adheres to [Semantic Versioning](https://semver.org/).
   Each setting, including `caller_id`, may be updated independently. Omitted
   fields stay unchanged; `None` and invalid values are rejected before sending.
 - `SessionConfig` reads effective AI and recording disclosure values, and the
-  public `AIDisclosure` type describes the managed-user modes.
+  public `AIDisclosure` type describes the disclosure modes. The server decides
+  which modes a user may set.
 
 ## [0.5.0rc4] - 2026-10-23
 

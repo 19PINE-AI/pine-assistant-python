@@ -7,7 +7,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, StrictBool, field_validator
 
 CallerID = Literal["user", "platform"]
-AIDisclosure = Literal["proactive", "on_request"]
+AIDisclosure = Literal["off", "on_request", "proactive"]
 
 
 class SessionInfo(BaseModel):

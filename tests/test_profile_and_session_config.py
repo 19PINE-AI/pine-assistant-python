@@ -372,12 +372,15 @@ def test_socketio_message_carries_client_now_date_only_when_given():
 @pytest.mark.parametrize("settings", [
     {"ai_disclosure": "proactive"},
     {"ai_disclosure": "on_request"},
+    {"ai_disclosure": "off"},
     {"recording_disclosure": False},
     {"recording_disclosure": True},
     {"caller_id": "platform", "ai_disclosure": "on_request", "recording_disclosure": False},
 ])
 async def test_disclosure_update_preserves_false_and_omits_unprovided_fields(sync, settings):
-    recorder = Recorder()
+    # The server always answers with both effective disclosure values.
+    effective = {"caller_id": "platform", "ai_disclosure": "proactive", "recording_disclosure": True}
+    recorder = Recorder(httpx.Response(200, json=success(effective)))
     if sync:
         with PineAI(
             api_key=API_KEY, user_id=PINE_USER_ID, base_url=BASE_URL, http_transport=httpx.MockTransport(recorder),
@@ -388,7 +391,7 @@ async def test_disclosure_update_preserves_false_and_omits_unprovided_fields(syn
             config = await client.sessions.update_config(7, **settings)
 
     assert recorder.body() == settings
-    assert config.model_dump(exclude_unset=True) == settings
+    assert config == SessionConfig(**effective)
     [request] = recorder.requests
     assert (request.method, request.url.path) == ("PUT", "/api/v2/sessions/7/config")
     assert request.headers[MANAGED_USER_HEADER] == PINE_USER_ID
@@ -399,8 +402,8 @@ async def test_disclosure_update_preserves_false_and_omits_unprovided_fields(syn
     {},
     {"caller_id": None},
     {"ai_disclosure": None},
-    {"ai_disclosure": "off"},
     {"ai_disclosure": "PROACTIVE"},
+    {"ai_disclosure": "unknown"},
     {"ai_disclosure": True},
     {"recording_disclosure": None},
     {"recording_disclosure": "false"},
@@ -419,6 +422,25 @@ async def test_invalid_disclosure_update_never_sends_request(sync, settings):
             with pytest.raises(ValueError):
                 await client.sessions.update_config(7, **settings)
     assert recorder.requests == []
+
+
+@pytest.mark.parametrize("sync", [False, True])
+async def test_server_rejection_of_disclosure_mode_surfaces_as_session_error(sync):
+    recorder = Recorder(httpx.Response(
+        400, json={"status": "error", "error": {"code": "invalid_request", "message": "invalid ai_disclosure"}},
+    ))
+    if sync:
+        with PineAI(
+            api_key=API_KEY, user_id=PINE_USER_ID, base_url=BASE_URL, http_transport=httpx.MockTransport(recorder),
+        ) as client, pytest.raises(SessionError) as excinfo:
+            client.sessions.update_config(7, ai_disclosure="off")
+    else:
+        async with async_client(recorder, user_id=PINE_USER_ID) as client:
+            with pytest.raises(SessionError) as excinfo:
+                await client.sessions.update_config(7, ai_disclosure="off")
+
+    assert (excinfo.value.code, excinfo.value.status_code) == ("invalid_request", 400)
+    assert recorder.body() == {"ai_disclosure": "off"}
 
 
 @pytest.mark.parametrize("sync", [False, True])
