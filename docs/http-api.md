@@ -154,8 +154,8 @@ These routes take the two headers above.
 | `POST /v2/sessions` | Creates a session. | `sessions.create()` |
 | `GET /v2/sessions` | Lists the user's sessions. | `sessions.list()` |
 | `GET /v2/sessions/{id}` | Returns one session. | `sessions.get()` |
-| `GET /v2/sessions/{id}/config` | Returns the session config, for example `{"caller_id": "platform"}`, or `{}`. | `sessions.get_config()` |
-| `PUT /v2/sessions/{id}/config` | Sets the caller ID. Body: `{"caller_id": "user"}` or `{"caller_id": "platform"}`. See "Caller ID". | `sessions.update_config()` |
+| `GET /v2/sessions/{id}/config` | Returns session config with effective `ai_disclosure` and `recording_disclosure` values. | `sessions.get_config()` |
+| `PUT /v2/sessions/{id}/config` | Updates supplied session settings. See "Caller ID" and "Call disclosures". | `sessions.update_config()` |
 | `POST /v2/sessions/{id}/messages` | Sends a message. Body: `{"content": "...", "client_now_date": "..."}`; `client_now_date` is optional, see "The user's time". | `sessions.send_message()` |
 | `GET /v2/sessions/{id}/messages` | Reads the stored messages, newest first. | `sessions.history()` |
 | `POST /v2/sessions/{id}/start` | Starts a prepared or paused task, or continues a stopped session. See "Stop and continue". | `sessions.start_task()` |
@@ -205,9 +205,29 @@ caller ID. `caller_id` is a session setting that selects it:
   while the session is paused applies when the session resumes.
 - `caller_id` does not change how the agent reaches the user. The agent still
   uses the user's phone for that.
-- Any other key or value returns 400 `invalid_request`.
+- Invalid values or unsupported config keys return 400 `invalid_request`.
 - 503 `session_config_push_failed` means that the value is saved, but the
   running agent did not get it yet. Send the same request again.
+
+### Call disclosures
+
+The config API accepts these additional fields for managed users:
+
+| Field | Values | Default |
+|---|---|---|
+| `ai_disclosure` | `"proactive"` (introduce as AI), `"on_request"` (disclose when asked) | `"proactive"` |
+| `recording_disclosure` | JSON `true` or `false` | `true` |
+
+For example, `PUT /v2/sessions/{id}/config` with
+`{"ai_disclosure": "on_request", "recording_disclosure": false}` changes both.
+Omitted fields stay unchanged; `null` is invalid. Recording disclosure controls
+the spoken notice, not whether the call is recorded. Changes affect subsequent
+calls; calls already placed keep their settings. The same 503 push-failure
+behavior described above applies.
+
+`GET` returns the effective disclosure values, including defaults. Pine's own
+users default to `"off"` and `false`; config API access restrictions remain
+unchanged. Managed users cannot set `ai_disclosure="off"`.
 
 ### The user's time
 

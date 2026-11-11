@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Session call disclosures on both async and sync clients:
+  `sessions.update_config(ai_disclosure="on_request", recording_disclosure=False)`.
+  Each setting, including `caller_id`, may be updated independently. Omitted
+  fields stay unchanged; `None` and invalid values are rejected before sending.
+- `SessionConfig` reads effective AI and recording disclosure values, and the
+  public `AIDisclosure` type describes the managed-user modes.
+
 ## [0.5.0rc4] - 2026-10-23
 
 ### New

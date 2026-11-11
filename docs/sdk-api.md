@@ -122,7 +122,7 @@ user = await partner_client.platform.managed_users.update(
 | `sessions.list(...)` | `SessionListResponse` |
 | `sessions.get(session_id)` | `SessionInfo` |
 | `sessions.get_config(session_id)` | `SessionConfig` |
-| `sessions.update_config(session_id, *, caller_id)` | `SessionConfig` after the change |
+| `sessions.update_config(session_id, *, caller_id=…, ai_disclosure=…, recording_disclosure=…)` | `SessionConfig` after the change |
 | `sessions.send_message(session_id, content, ..., client_now_date=None)` | `SessionMessageStatus` |
 | `sessions.history(session_id, *, limit=30, before_message_id=None)` | `SessionHistoryPage`: one page of stored messages, newest first |
 | `sessions.start_task(session_id)` | `dict` |
@@ -171,6 +171,35 @@ session = await client.sessions.create()
 await client.sessions.update_config(session["id"], caller_id="platform")
 await client.sessions.send_message(session["id"], "Call the clinic to book a visit")
 ```
+
+### Call disclosures
+
+Managed-user sessions default to `ai_disclosure="proactive"` and
+`recording_disclosure=True`. `"proactive"` makes the assistant introduce itself
+as AI; `"on_request"` makes it disclose that identity when asked. Managed users
+cannot select `"off"`. Pine's own users default to `"off"` and `False`; this
+does not grant them access to the config API.
+
+```python
+session = await client.sessions.create()
+config = await client.sessions.update_config(
+    session["id"], ai_disclosure="on_request", recording_disclosure=False,
+)
+await client.sessions.send_message(session["id"], "Call the clinic to book a visit")
+```
+
+Both `AsyncPineAI` and `PineAI` support these settings. Supply at least one
+setting. Omitted settings stay unchanged; `None`, invalid modes and non-boolean
+recording values raise `ValueError` before any request is sent. Setting
+`recording_disclosure=False` disables the spoken recording notice, not recording.
+Changes affect subsequent calls; calls already placed keep their settings.
+The same 503 `session_config_push_failed` behavior described above applies.
+
+`sessions.get_config()` returns the effective disclosure values from the server.
+`SessionConfig.ai_disclosure` can also be `"off"` on reads; both disclosure
+fields are `None` when an older server omits them. The SDK does not choose
+product defaults locally. `AIDisclosure`, exported from `pine_assistant`, types
+the two modes accepted by `update_config()`.
 
 ### The user's time
 

@@ -366,3 +366,85 @@ def test_socketio_message_carries_client_now_date_only_when_given():
     )
     with pytest.raises(ValueError, match="client_now_date"):
         ChatEngine._build_message_data("hi", client_now_date="2026-10-21T09:00:00")
+
+
+@pytest.mark.parametrize("sync", [False, True])
+@pytest.mark.parametrize("settings", [
+    {"ai_disclosure": "proactive"},
+    {"ai_disclosure": "on_request"},
+    {"recording_disclosure": False},
+    {"recording_disclosure": True},
+    {"caller_id": "platform", "ai_disclosure": "on_request", "recording_disclosure": False},
+])
+async def test_disclosure_update_preserves_false_and_omits_unprovided_fields(sync, settings):
+    recorder = Recorder()
+    if sync:
+        with PineAI(
+            api_key=API_KEY, user_id=PINE_USER_ID, base_url=BASE_URL, http_transport=httpx.MockTransport(recorder),
+        ) as client:
+            config = client.sessions.update_config(7, **settings)
+    else:
+        async with async_client(recorder, user_id=PINE_USER_ID) as client:
+            config = await client.sessions.update_config(7, **settings)
+
+    assert recorder.body() == settings
+    assert config.model_dump(exclude_unset=True) == settings
+    [request] = recorder.requests
+    assert (request.method, request.url.path) == ("PUT", "/api/v2/sessions/7/config")
+    assert request.headers[MANAGED_USER_HEADER] == PINE_USER_ID
+
+
+@pytest.mark.parametrize("sync", [False, True])
+@pytest.mark.parametrize("settings", [
+    {},
+    {"caller_id": None},
+    {"ai_disclosure": None},
+    {"ai_disclosure": "off"},
+    {"ai_disclosure": "PROACTIVE"},
+    {"ai_disclosure": True},
+    {"recording_disclosure": None},
+    {"recording_disclosure": "false"},
+    {"recording_disclosure": 0},
+    {"recording_disclosure": 1},
+])
+async def test_invalid_disclosure_update_never_sends_request(sync, settings):
+    recorder = Recorder()
+    if sync:
+        with PineAI(
+            api_key=API_KEY, user_id=PINE_USER_ID, base_url=BASE_URL, http_transport=httpx.MockTransport(recorder),
+        ) as client, pytest.raises(ValueError):
+            client.sessions.update_config(7, **settings)
+    else:
+        async with async_client(recorder, user_id=PINE_USER_ID) as client:
+            with pytest.raises(ValueError):
+                await client.sessions.update_config(7, **settings)
+    assert recorder.requests == []
+
+
+@pytest.mark.parametrize("sync", [False, True])
+@pytest.mark.parametrize("payload", [
+    {"ai_disclosure": "proactive", "recording_disclosure": True},
+    {"ai_disclosure": "on_request", "recording_disclosure": False},
+    {"ai_disclosure": "off", "recording_disclosure": False},
+    {},
+])
+async def test_read_disclosure_config_and_older_servers(sync, payload):
+    recorder = Recorder(httpx.Response(200, json=success(payload)))
+    if sync:
+        with PineAI(
+            api_key=API_KEY, user_id=PINE_USER_ID, base_url=BASE_URL, http_transport=httpx.MockTransport(recorder),
+        ) as client:
+            config = client.sessions.get_config(7)
+    else:
+        async with async_client(recorder, user_id=PINE_USER_ID) as client:
+            config = await client.sessions.get_config(7)
+    assert config.ai_disclosure == payload.get("ai_disclosure")
+    assert config.recording_disclosure is payload.get("recording_disclosure")
+
+
+@pytest.mark.parametrize("recording_disclosure", ["false", 0, 1])
+async def test_malformed_disclosure_response_is_not_coerced(recording_disclosure):
+    recorder = Recorder(httpx.Response(200, json=success({"recording_disclosure": recording_disclosure})))
+    async with async_client(recorder, user_id=PINE_USER_ID) as client:
+        with pytest.raises(SessionError, match="invalid session config response"):
+            await client.sessions.get_config(7)

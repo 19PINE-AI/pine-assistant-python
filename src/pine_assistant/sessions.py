@@ -6,12 +6,14 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
+from enum import Enum
 from typing import Any, get_args
 
 from pydantic import ValidationError
 
 from pine_assistant.errors import PineAIError, SessionError
 from pine_assistant.models.session import (
+    AIDisclosure,
     CallerID,
     SessionConfig,
     SessionHistoryPage,
@@ -52,6 +54,31 @@ def _caller_id(caller_id: CallerID) -> CallerID:
     if caller_id not in get_args(CallerID):
         raise ValueError('caller_id must be "user" or "platform"')
     return caller_id
+
+
+class _Unset(Enum):
+    VALUE = "unset"
+
+
+def _config_update(
+    caller_id: CallerID | _Unset,
+    ai_disclosure: AIDisclosure | _Unset,
+    recording_disclosure: bool | _Unset,
+) -> dict[str, Any]:
+    body: dict[str, Any] = {}
+    if caller_id is not _Unset.VALUE:
+        body["caller_id"] = _caller_id(caller_id)
+    if ai_disclosure is not _Unset.VALUE:
+        if ai_disclosure not in get_args(AIDisclosure):
+            raise ValueError('ai_disclosure must be "proactive" or "on_request"')
+        body["ai_disclosure"] = ai_disclosure
+    if recording_disclosure is not _Unset.VALUE:
+        if not isinstance(recording_disclosure, bool):
+            raise ValueError("recording_disclosure must be a boolean")
+        body["recording_disclosure"] = recording_disclosure
+    if not body:
+        raise ValueError("provide at least one session config setting")
+    return body
 
 
 def _config_path(session_id: str | int) -> str:
@@ -181,8 +208,21 @@ class SessionsAPI:
         except PineAIError as exc:
             raise _session_error(exc) from exc
 
-    async def update_config(self, session_id: str | int, *, caller_id: CallerID) -> SessionConfig:
-        """Set the caller ID of the calls the agent places in this session.
+    async def update_config(
+        self,
+        session_id: str | int,
+        *,
+        caller_id: CallerID | _Unset = _Unset.VALUE,
+        ai_disclosure: AIDisclosure | _Unset = _Unset.VALUE,
+        recording_disclosure: bool | _Unset = _Unset.VALUE,
+    ) -> SessionConfig:
+        """Update settings for the next calls the agent places in this session.
+
+        Omitted fields stay unchanged; explicit None is invalid. Managed users
+        default to proactive AI disclosure and recording disclosure enabled.
+        Set ai_disclosure="on_request" to disclose AI identity only when asked;
+        "off" is not a managed-user setting. recording_disclosure=False disables
+        the spoken notice, not recording. Calls already placed keep their settings.
 
         ``"user"``, or not set, presents the user's assistant number if it has
         one, else the user's phone, else a number of the platform's pool;
@@ -191,7 +231,7 @@ class SessionsAPI:
         ``session_config_push_failed`` means the value is saved but has not
         reached the running agent yet; send the same value again.
         """
-        body = {"caller_id": _caller_id(caller_id)}
+        body = _config_update(caller_id, ai_disclosure, recording_disclosure)
         try:
             return _parse_session_config(await self._http.put(_config_path(session_id), body))
         except PineAIError as exc:
@@ -362,8 +402,16 @@ class SyncSessionsAPI:
         except PineAIError as exc:
             raise _session_error(exc) from exc
 
-    def update_config(self, session_id: str | int, *, caller_id: CallerID) -> SessionConfig:
-        body = {"caller_id": _caller_id(caller_id)}
+    def update_config(
+        self,
+        session_id: str | int,
+        *,
+        caller_id: CallerID | _Unset = _Unset.VALUE,
+        ai_disclosure: AIDisclosure | _Unset = _Unset.VALUE,
+        recording_disclosure: bool | _Unset = _Unset.VALUE,
+    ) -> SessionConfig:
+        """Update next-call settings; see :meth:`SessionsAPI.update_config` for semantics."""
+        body = _config_update(caller_id, ai_disclosure, recording_disclosure)
         try:
             return _parse_session_config(self._http.put(_config_path(session_id), body))
         except PineAIError as exc:
