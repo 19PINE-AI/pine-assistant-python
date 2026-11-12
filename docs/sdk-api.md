@@ -163,8 +163,9 @@ caller ID. `caller_id` is a session setting that selects it:
 - `caller_id` does not change how the agent reaches the user. The agent still
   uses the user's phone for that.
 - A 503 `session_config_push_failed` means that the value is saved, but delivery to
-  the running agent was not confirmed. Send the same value again. A 500 means
-  that the change was not saved.
+  the running agent was not confirmed. Send the same value again. A 500 normally means
+  that the change was not saved; if unsure, call `get_config()` or send the same
+  value again.
 - Any other value raises `ValueError` before any request is sent.
 
 ```python
@@ -299,7 +300,7 @@ from `auth.*`, and `SessionError` from `sessions.list`, `get`, `get_config`,
 `invalid_request` when the server rejects a value (for example
 `ai_disclosure="disabled"` for a managed user), 403 `forbidden` when the user
 may not use the config API, 503 `session_config_push_failed` when the change is
-saved but not delivered, and 500 when it was not saved (see "Caller ID").
+saved but not delivered, and 500 when it was normally not saved (see "Caller ID").
 
 The codes for managed users are listed in [docs/http-api.md](http-api.md).
 Error messages never contain the key, the `external_id` or the user ID.

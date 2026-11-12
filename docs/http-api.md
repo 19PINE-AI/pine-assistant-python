@@ -207,8 +207,9 @@ caller ID. `caller_id` is a session setting that selects it:
   uses the user's phone for that.
 - Invalid values or unsupported config keys return 400 `invalid_request`.
 - 503 `session_config_push_failed` means that the value is saved, but delivery to
-  the running agent was not confirmed. Send the same request again. A 500 means
-  that the change was not saved.
+  the running agent was not confirmed. Send the same request again. A 500 normally
+  means the change was not saved; if unsure, GET the settings or resend the same
+  PUT.
 
 ### Call disclosures
 
