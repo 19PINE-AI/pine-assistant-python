@@ -164,8 +164,9 @@ caller ID. `caller_id` is a session setting that selects it:
   uses the user's phone for that.
 - A 503 `session_config_push_failed` means that the value is saved, but delivery to
   the running agent was not confirmed. Send the same value again. A 500 normally means
-  that the change was not saved; if unsure, call `get_config()` or send the same
-  value again.
+  that the change was not saved. After a timeout, a dropped connection or a 502/504
+  the change may or may not be saved. If unsure, call `get_config()` or send the
+  same value again; sending it again is safe.
 - Any other value raises `ValueError` before any request is sent.
 
 ```python

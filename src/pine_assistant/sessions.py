@@ -226,8 +226,9 @@ class SessionsAPI:
         Calls already placed keep their settings. A 503
         ``session_config_push_failed`` means the value is saved but delivery to
         the running agent was not confirmed; send the same value again. A 500
-        normally means the change was not saved; if unsure, call
-        :meth:`get_config` or send the same value again.
+        normally means the change was not saved. After a timeout, a dropped
+        connection or a 502/504 it may or may not be saved. If unsure, call
+        :meth:`get_config` or send the same value again; resending is safe.
 
         caller_id selects the number the call shows. ``"user"``, or not set,
         presents the user's assistant number if it has one, else the user's
