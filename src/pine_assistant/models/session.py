@@ -7,6 +7,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, field_validator
 
 CallerID = Literal["user", "platform"]
+AIDisclosure = Literal["disabled", "on_request", "proactive"]
 
 
 class SessionInfo(BaseModel):
@@ -40,6 +41,9 @@ class SessionConfig(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     caller_id: str | None = None
+    # None means a server predating disclosure settings. A plain string, not the
+    # update Literal, on purpose: a mode added by the server still parses.
+    ai_disclosure: str | None = None
 
 
 class SessionListResponse(BaseModel):

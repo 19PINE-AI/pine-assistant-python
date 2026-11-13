@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### New
+
+- **Choose AI disclosure.**
+  `sessions.update_config(ai_disclosure="on_request")` sets whether the
+  assistant says it is an AI, on both async and sync clients. Requires a
+  server with session disclosure support; an older server may silently accept
+  the setting for test accounts without applying it.
+- **`caller_id` is no longer required.** `update_config()` changes only the
+  settings given; `None` leaves a setting unchanged. A call with nothing to
+  change, or an unknown value, raises `ValueError` before sending.
+- **Read AI disclosure.** `SessionConfig` has the effective `ai_disclosure`,
+  and the public `AIDisclosure` type describes the modes. The server decides
+  which modes a user may set.
+
 ## [0.5.0rc4] - 2026-10-23
 
 ### New

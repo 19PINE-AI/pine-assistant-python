@@ -154,8 +154,8 @@ These routes take the two headers above.
 | `POST /v2/sessions` | Creates a session. | `sessions.create()` |
 | `GET /v2/sessions` | Lists the user's sessions. | `sessions.list()` |
 | `GET /v2/sessions/{id}` | Returns one session. | `sessions.get()` |
-| `GET /v2/sessions/{id}/config` | Returns the session config, for example `{"caller_id": "platform"}`, or `{}`. | `sessions.get_config()` |
-| `PUT /v2/sessions/{id}/config` | Sets the caller ID. Body: `{"caller_id": "user"}` or `{"caller_id": "platform"}`. See "Caller ID". | `sessions.update_config()` |
+| `GET /v2/sessions/{id}/config` | Returns session config with the effective `ai_disclosure` value. | `sessions.get_config()` |
+| `PUT /v2/sessions/{id}/config` | Updates supplied session settings. See "Caller ID" and "AI disclosure". | `sessions.update_config()` |
 | `POST /v2/sessions/{id}/messages` | Sends a message. Body: `{"content": "...", "client_now_date": "..."}`; `client_now_date` is optional, see "The user's time". | `sessions.send_message()` |
 | `GET /v2/sessions/{id}/messages` | Reads the stored messages, newest first. | `sessions.history()` |
 | `POST /v2/sessions/{id}/start` | Starts a prepared or paused task, or continues a stopped session. See "Stop and continue". | `sessions.start_task()` |
@@ -205,9 +205,35 @@ caller ID. `caller_id` is a session setting that selects it:
   while the session is paused applies when the session resumes.
 - `caller_id` does not change how the agent reaches the user. The agent still
   uses the user's phone for that.
-- Any other key or value returns 400 `invalid_request`.
-- 503 `session_config_push_failed` means that the value is saved, but the
-  running agent did not get it yet. Send the same request again.
+- Invalid values or unsupported config keys return 400 `invalid_request`.
+- 503 `session_config_push_failed` means that the value is saved, but delivery to
+  the running agent was not confirmed. Send the same request again. A 500 normally
+  means the change was not saved; if unsure, GET the settings or resend the same
+  PUT.
+
+### AI disclosure
+
+The config API also accepts `ai_disclosure`, which controls whether the
+assistant says it is an AI on a call:
+
+| Value | Meaning |
+|---|---|
+| `"proactive"` | Introduce itself as AI. |
+| `"on_request"` | Disclose that identity when asked. |
+| `"disabled"` | Do not disclose it. |
+
+For example, `PUT /v2/sessions/{id}/config` with
+`{"ai_disclosure": "on_request"}` changes it. Omitted fields stay unchanged;
+`null` is invalid. Changes affect subsequent calls; calls already placed keep
+their settings. The same 503 and 500 behavior described above applies.
+
+`GET` returns the effective value, including the default. Managed users default
+to `"proactive"`; Pine test accounts default to `"disabled"`. The server decides
+which modes a user may set: managed users cannot set `ai_disclosure="disabled"`,
+and the request returns 400 `invalid_request`.
+
+This field requires a server with session disclosure support. An older server
+may silently accept it for test accounts without applying it.
 
 ### The user's time
 

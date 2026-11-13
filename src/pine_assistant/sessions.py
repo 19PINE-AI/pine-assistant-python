@@ -12,6 +12,7 @@ from pydantic import ValidationError
 
 from pine_assistant.errors import PineAIError, SessionError
 from pine_assistant.models.session import (
+    AIDisclosure,
     CallerID,
     SessionConfig,
     SessionHistoryPage,
@@ -52,6 +53,23 @@ def _caller_id(caller_id: CallerID) -> CallerID:
     if caller_id not in get_args(CallerID):
         raise ValueError('caller_id must be "user" or "platform"')
     return caller_id
+
+
+def _ai_disclosure(ai_disclosure: AIDisclosure) -> AIDisclosure:
+    if ai_disclosure not in get_args(AIDisclosure):
+        raise ValueError('ai_disclosure must be "disabled", "on_request" or "proactive"')
+    return ai_disclosure
+
+
+def _config_update(caller_id: CallerID | None, ai_disclosure: AIDisclosure | None) -> dict[str, Any]:
+    body: dict[str, Any] = {}
+    if caller_id is not None:
+        body["caller_id"] = _caller_id(caller_id)
+    if ai_disclosure is not None:
+        body["ai_disclosure"] = _ai_disclosure(ai_disclosure)
+    if not body:
+        raise ValueError("provide at least one session config setting")
+    return body
 
 
 def _config_path(session_id: str | int) -> str:
@@ -181,17 +199,35 @@ class SessionsAPI:
         except PineAIError as exc:
             raise _session_error(exc) from exc
 
-    async def update_config(self, session_id: str | int, *, caller_id: CallerID) -> SessionConfig:
-        """Set the caller ID of the calls the agent places in this session.
+    async def update_config(
+        self,
+        session_id: str | int,
+        *,
+        caller_id: CallerID | None = None,
+        ai_disclosure: AIDisclosure | None = None,
+    ) -> SessionConfig:
+        """Update settings for the next calls the agent places in this session.
 
-        ``"user"``, or not set, presents the user's assistant number if it has
-        one, else the user's phone, else a number of the platform's pool;
-        ``"platform"`` presents a number of the platform's pool. Set it at any
-        time: the agent uses the value for its next call. A 503
-        ``session_config_push_failed`` means the value is saved but has not
-        reached the running agent yet; send the same value again.
+        Change only the settings given; ``None`` leaves a setting unchanged.
+        Calls already placed keep their settings. A 503
+        ``session_config_push_failed`` means the value is saved but delivery to
+        the running agent was not confirmed; send the same value again. A 500
+        normally means the change was not saved. After a timeout, a dropped
+        connection or a 502/504 it may or may not be saved. If unsure, call
+        :meth:`get_config` or send the same value again; resending is safe.
+
+        caller_id selects the number the call shows. ``"user"``, or not set,
+        presents the user's assistant number if it has one, else the user's
+        phone, else a number of the platform's pool; ``"platform"`` presents a
+        number of the platform's pool.
+
+        ai_disclosure controls whether the assistant says it is an AI on the
+        call. Managed users default to ``"proactive"`` and the server rejects
+        ai_disclosure="disabled" for them with 400 ``invalid_request``; the
+        server decides which modes a user may set. ai_disclosure="on_request"
+        discloses AI identity only when asked.
         """
-        body = {"caller_id": _caller_id(caller_id)}
+        body = _config_update(caller_id, ai_disclosure)
         try:
             return _parse_session_config(await self._http.put(_config_path(session_id), body))
         except PineAIError as exc:
@@ -362,8 +398,15 @@ class SyncSessionsAPI:
         except PineAIError as exc:
             raise _session_error(exc) from exc
 
-    def update_config(self, session_id: str | int, *, caller_id: CallerID) -> SessionConfig:
-        body = {"caller_id": _caller_id(caller_id)}
+    def update_config(
+        self,
+        session_id: str | int,
+        *,
+        caller_id: CallerID | None = None,
+        ai_disclosure: AIDisclosure | None = None,
+    ) -> SessionConfig:
+        """Update next-call settings; see :meth:`SessionsAPI.update_config` for semantics."""
+        body = _config_update(caller_id, ai_disclosure)
         try:
             return _parse_session_config(self._http.put(_config_path(session_id), body))
         except PineAIError as exc:

@@ -122,7 +122,7 @@ user = await partner_client.platform.managed_users.update(
 | `sessions.list(...)` | `SessionListResponse` |
 | `sessions.get(session_id)` | `SessionInfo` |
 | `sessions.get_config(session_id)` | `SessionConfig` |
-| `sessions.update_config(session_id, *, caller_id)` | `SessionConfig` after the change |
+| `sessions.update_config(session_id, *, caller_id=None, ai_disclosure=None)` | `SessionConfig` after the change |
 | `sessions.send_message(session_id, content, ..., client_now_date=None)` | `SessionMessageStatus` |
 | `sessions.history(session_id, *, limit=30, before_message_id=None)` | `SessionHistoryPage`: one page of stored messages, newest first |
 | `sessions.start_task(session_id)` | `dict` |
@@ -162,8 +162,11 @@ caller ID. `caller_id` is a session setting that selects it:
   while the session is paused applies when the session resumes.
 - `caller_id` does not change how the agent reaches the user. The agent still
   uses the user's phone for that.
-- A 503 `session_config_push_failed` means that the value is saved, but the
-  running agent did not get it yet. Send the same value again.
+- A 503 `session_config_push_failed` means that the value is saved, but delivery to
+  the running agent was not confirmed. Send the same value again. A 500 normally means
+  that the change was not saved. After a timeout, a dropped connection or a 502/504
+  the change may or may not be saved. If unsure, call `get_config()` or send the
+  same value again; sending it again is safe.
 - Any other value raises `ValueError` before any request is sent.
 
 ```python
@@ -171,6 +174,44 @@ session = await client.sessions.create()
 await client.sessions.update_config(session["id"], caller_id="platform")
 await client.sessions.send_message(session["id"], "Call the clinic to book a visit")
 ```
+
+### AI disclosure
+
+`ai_disclosure` controls whether the assistant says it is an AI on a call:
+
+| Value | Meaning |
+|---|---|
+| `"proactive"` | Introduce itself as AI. |
+| `"on_request"` | Disclose that identity when asked. |
+| `"disabled"` | Do not disclose it. |
+
+Managed-user sessions default to `"proactive"`. Pine test accounts default to
+`"disabled"`. The server decides which modes a user may set: it rejects
+`ai_disclosure="disabled"` for managed users with 400 `invalid_request`.
+
+This setting requires a server with session disclosure support. An older
+server may silently accept it for test accounts without applying it.
+
+```python
+session = await client.sessions.create()
+config = await client.sessions.update_config(
+    session["id"], ai_disclosure="on_request",
+)
+await client.sessions.send_message(session["id"], "Call the clinic to book a visit")
+```
+
+Both `AsyncPineAI` and `PineAI` support this setting. `update_config()`
+changes only the settings given; `None` leaves a setting unchanged and is not
+sent. A call with no setting to change, a non-string or an unknown mode raises
+`ValueError` before any request is sent. Changes affect subsequent calls; calls
+already placed keep their settings. The same 503 and 500 behavior described
+above applies.
+
+`sessions.get_config()` returns the effective `ai_disclosure` from the server.
+It is `None` when an older server omits it. It is read as a plain string, so a
+mode added later by the server still parses. The SDK does not choose product
+defaults locally. `AIDisclosure`, exported from `pine_assistant`, types the
+modes accepted by `update_config()`.
 
 ### The user's time
 
@@ -253,9 +294,11 @@ from `auth.*`, and `SessionError` from `sessions.list`, `get`, `get_config`,
 | 404 | `platform_managed_user_not_found` | No managed user of yours has this `external_id`. |
 | 429 | `too_many_requests` | Too many requests. |
 
-`SessionError` from `sessions.get_config()` and `update_config()`: 403
-`forbidden` when the client is neither a managed user nor a test account, and 503
-`session_config_push_failed` (see "Caller ID").
+`SessionError` from `sessions.get_config()` and `update_config()`: 400
+`invalid_request` when the server rejects a value (for example
+`ai_disclosure="disabled"` for a managed user), 403 `forbidden` when the user
+may not use the config API, 503 `session_config_push_failed` when the change is
+saved but not delivered, and 500 when it was normally not saved (see "Caller ID").
 
 The codes for managed users are listed in [docs/http-api.md](http-api.md).
 Error messages never contain the key, the `external_id` or the user ID.

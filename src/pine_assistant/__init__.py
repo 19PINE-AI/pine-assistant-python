@@ -22,6 +22,7 @@ from pine_assistant.models.events import (
 )
 from pine_assistant.models.platform import ManagedUser, ManagedUserAssistant
 from pine_assistant.models.session import (
+    AIDisclosure,
     CallerID,
     SessionConfig,
     SessionHistoryMessage,
@@ -75,6 +76,7 @@ __all__ = [
     "SessionInfo",
     "SessionConfig",
     "CallerID",
+    "AIDisclosure",
     "SessionHistoryMessage",
     "SessionHistoryPage",
     "SessionListResponse",
