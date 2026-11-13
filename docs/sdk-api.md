@@ -203,9 +203,9 @@ await client.sessions.send_message(session["id"], "Call the clinic to book a vis
 Both `AsyncPineAI` and `PineAI` support this setting. `update_config()`
 changes only the settings given; `None` leaves a setting unchanged and is not
 sent. A call with no setting to change, a non-string or an unknown mode raises
-`ValueError` before any request is sent.
-Changes affect subsequent calls; calls already placed keep their settings.
-The same 503 and 500 behavior described above applies.
+`ValueError` before any request is sent. Changes affect subsequent calls; calls
+already placed keep their settings. The same 503 and 500 behavior described
+above applies.
 
 `sessions.get_config()` returns the effective `ai_disclosure` from the server.
 It is `None` when an older server omits it. It is read as a plain string, so a
