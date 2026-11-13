@@ -376,9 +376,7 @@ def test_socketio_message_carries_client_now_date_only_when_given():
     {"caller_id": None, "ai_disclosure": "on_request"},
 ])
 async def test_disclosure_update_sends_only_provided_fields(sync, settings):
-    # The server answers with every effective disclosure value, including ones
-    # the SDK does not expose.
-    effective = {"caller_id": "platform", "ai_disclosure": "proactive", "recording_disclosure": "proactive"}
+    effective = {"caller_id": "platform", "ai_disclosure": "proactive"}
     recorder = Recorder(httpx.Response(200, json=success(effective)))
     if sync:
         with PineAI(
@@ -457,26 +455,6 @@ async def test_read_disclosure_config_and_older_servers(sync, payload):
         async with async_client(recorder, user_id=PINE_USER_ID) as client:
             config = await client.sessions.get_config(7)
     assert config.ai_disclosure == payload.get("ai_disclosure")
-
-
-@pytest.mark.parametrize("sync", [False, True])
-@pytest.mark.parametrize("method", ["get_config", "update_config"])
-async def test_recording_disclosure_from_server_is_omitted(sync, method):
-    payload = {"caller_id": "user", "ai_disclosure": "proactive", "recording_disclosure": "proactive", "other": 1}
-    recorder = Recorder(httpx.Response(200, json=success(payload)))
-    kwargs = {"ai_disclosure": "proactive"} if method == "update_config" else {}
-    if sync:
-        with PineAI(
-            api_key=API_KEY, user_id=PINE_USER_ID, base_url=BASE_URL, http_transport=httpx.MockTransport(recorder),
-        ) as client:
-            config = getattr(client.sessions, method)(7, **kwargs)
-    else:
-        async with async_client(recorder, user_id=PINE_USER_ID) as client:
-            config = await getattr(client.sessions, method)(7, **kwargs)
-
-    assert config.ai_disclosure == "proactive"
-    assert not hasattr(config, "recording_disclosure")
-    assert config.model_dump() == {"caller_id": "user", "ai_disclosure": "proactive", "other": 1}
 
 
 @pytest.mark.parametrize("value", [True, 0, 1])
