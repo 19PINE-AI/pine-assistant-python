@@ -9,19 +9,17 @@ project adheres to [Semantic Versioning](https://semver.org/).
 
 ### New
 
-- **Choose call disclosures.**
-  `sessions.update_config(ai_disclosure="on_request", recording_disclosure="disabled")`
-  sets whether the assistant says it is an AI and that the call is recorded, on
-  both async and sync clients. Requires a server with session disclosure
-  support; an older server may silently accept these settings for test
-  accounts without applying them.
+- **Choose AI disclosure.**
+  `sessions.update_config(ai_disclosure="on_request")` sets whether the
+  assistant says it is an AI, on both async and sync clients. Requires a
+  server with session disclosure support; an older server may silently accept
+  the setting for test accounts without applying it.
 - **`caller_id` is no longer required.** `update_config()` changes only the
   settings given; `None` leaves a setting unchanged. A call with nothing to
   change, or an unknown value, raises `ValueError` before sending.
-- **Read disclosures.** `SessionConfig` has the effective `ai_disclosure` and
-  `recording_disclosure`, and the public `AIDisclosure` and
-  `RecordingDisclosure` types describe the modes. The server decides which
-  modes a user may set.
+- **Read AI disclosure.** `SessionConfig` has the effective `ai_disclosure`,
+  and the public `AIDisclosure` type describes the modes. The server decides
+  which modes a user may set.
 
 ## [0.5.0rc4] - 2026-10-23
 

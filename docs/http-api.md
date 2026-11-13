@@ -154,8 +154,8 @@ These routes take the two headers above.
 | `POST /v2/sessions` | Creates a session. | `sessions.create()` |
 | `GET /v2/sessions` | Lists the user's sessions. | `sessions.list()` |
 | `GET /v2/sessions/{id}` | Returns one session. | `sessions.get()` |
-| `GET /v2/sessions/{id}/config` | Returns session config with effective `ai_disclosure` and `recording_disclosure` values. | `sessions.get_config()` |
-| `PUT /v2/sessions/{id}/config` | Updates supplied session settings. See "Caller ID" and "Call disclosures". | `sessions.update_config()` |
+| `GET /v2/sessions/{id}/config` | Returns session config with the effective `ai_disclosure` value. | `sessions.get_config()` |
+| `PUT /v2/sessions/{id}/config` | Updates supplied session settings. See "Caller ID" and "AI disclosure". | `sessions.update_config()` |
 | `POST /v2/sessions/{id}/messages` | Sends a message. Body: `{"content": "...", "client_now_date": "..."}`; `client_now_date` is optional, see "The user's time". | `sessions.send_message()` |
 | `GET /v2/sessions/{id}/messages` | Reads the stored messages, newest first. | `sessions.history()` |
 | `POST /v2/sessions/{id}/start` | Starts a prepared or paused task, or continues a stopped session. See "Stop and continue". | `sessions.start_task()` |
@@ -211,29 +211,29 @@ caller ID. `caller_id` is a session setting that selects it:
   means the change was not saved; if unsure, GET the settings or resend the same
   PUT.
 
-### Call disclosures
+### AI disclosure
 
-The config API accepts these additional fields:
+The config API also accepts `ai_disclosure`, which controls whether the
+assistant says it is an AI on a call:
 
-| Field | Values | Default |
-|---|---|---|
-| `ai_disclosure` | `"proactive"` (introduce as AI), `"on_request"` (disclose when asked), `"disabled"` | `"proactive"` for managed users |
-| `recording_disclosure` | `"proactive"` (announce that the call is recorded), `"disabled"` | `"proactive"` for managed users |
+| Value | Meaning |
+|---|---|
+| `"proactive"` | Introduce itself as AI. |
+| `"on_request"` | Disclose that identity when asked. |
+| `"disabled"` | Do not disclose it. |
 
 For example, `PUT /v2/sessions/{id}/config` with
-`{"ai_disclosure": "on_request", "recording_disclosure": "disabled"}` changes both.
-Omitted fields stay unchanged; `null` is invalid. Recording disclosure controls
-the spoken notice, not whether the call is recorded. Changes affect subsequent
-calls; calls already placed keep their settings. The same 503 and 500 behavior
-described above applies.
+`{"ai_disclosure": "on_request"}` changes it. Omitted fields stay unchanged;
+`null` is invalid. Changes affect subsequent calls; calls already placed keep
+their settings. The same 503 and 500 behavior described above applies.
 
-`GET` returns the effective disclosure values, including defaults. Pine test
-accounts default to `"disabled"` for both. The server decides which modes a user
-may set: managed users cannot set `ai_disclosure="disabled"`, and the request
-returns 400 `invalid_request`.
+`GET` returns the effective value, including the default. Managed users default
+to `"proactive"`; Pine test accounts default to `"disabled"`. The server decides
+which modes a user may set: managed users cannot set `ai_disclosure="disabled"`,
+and the request returns 400 `invalid_request`.
 
-These fields require a server with session disclosure support. An older server
-may silently accept them for test accounts without applying them.
+This field requires a server with session disclosure support. An older server
+may silently accept it for test accounts without applying it.
 
 ### The user's time
 

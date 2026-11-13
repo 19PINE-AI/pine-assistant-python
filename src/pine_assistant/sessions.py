@@ -14,7 +14,6 @@ from pine_assistant.errors import PineAIError, SessionError
 from pine_assistant.models.session import (
     AIDisclosure,
     CallerID,
-    RecordingDisclosure,
     SessionConfig,
     SessionHistoryPage,
     SessionInfo,
@@ -62,24 +61,12 @@ def _ai_disclosure(ai_disclosure: AIDisclosure) -> AIDisclosure:
     return ai_disclosure
 
 
-def _recording_disclosure(recording_disclosure: RecordingDisclosure) -> RecordingDisclosure:
-    if recording_disclosure not in get_args(RecordingDisclosure):
-        raise ValueError('recording_disclosure must be "disabled" or "proactive"')
-    return recording_disclosure
-
-
-def _config_update(
-    caller_id: CallerID | None,
-    ai_disclosure: AIDisclosure | None,
-    recording_disclosure: RecordingDisclosure | None,
-) -> dict[str, Any]:
+def _config_update(caller_id: CallerID | None, ai_disclosure: AIDisclosure | None) -> dict[str, Any]:
     body: dict[str, Any] = {}
     if caller_id is not None:
         body["caller_id"] = _caller_id(caller_id)
     if ai_disclosure is not None:
         body["ai_disclosure"] = _ai_disclosure(ai_disclosure)
-    if recording_disclosure is not None:
-        body["recording_disclosure"] = _recording_disclosure(recording_disclosure)
     if not body:
         raise ValueError("provide at least one session config setting")
     return body
@@ -218,7 +205,6 @@ class SessionsAPI:
         *,
         caller_id: CallerID | None = None,
         ai_disclosure: AIDisclosure | None = None,
-        recording_disclosure: RecordingDisclosure | None = None,
     ) -> SessionConfig:
         """Update settings for the next calls the agent places in this session.
 
@@ -235,15 +221,13 @@ class SessionsAPI:
         phone, else a number of the platform's pool; ``"platform"`` presents a
         number of the platform's pool.
 
-        ai_disclosure and recording_disclosure control what the assistant says
-        on the call. Managed users default to ``"proactive"`` for both and the
-        server rejects ai_disclosure="disabled" for them with 400
-        ``invalid_request``; the server decides which modes a user may set.
-        ai_disclosure="on_request" discloses AI identity only when asked.
-        recording_disclosure="disabled" turns off the spoken notice, not
-        recording.
+        ai_disclosure controls whether the assistant says it is an AI on the
+        call. Managed users default to ``"proactive"`` and the server rejects
+        ai_disclosure="disabled" for them with 400 ``invalid_request``; the
+        server decides which modes a user may set. ai_disclosure="on_request"
+        discloses AI identity only when asked.
         """
-        body = _config_update(caller_id, ai_disclosure, recording_disclosure)
+        body = _config_update(caller_id, ai_disclosure)
         try:
             return _parse_session_config(await self._http.put(_config_path(session_id), body))
         except PineAIError as exc:
@@ -420,10 +404,9 @@ class SyncSessionsAPI:
         *,
         caller_id: CallerID | None = None,
         ai_disclosure: AIDisclosure | None = None,
-        recording_disclosure: RecordingDisclosure | None = None,
     ) -> SessionConfig:
         """Update next-call settings; see :meth:`SessionsAPI.update_config` for semantics."""
-        body = _config_update(caller_id, ai_disclosure, recording_disclosure)
+        body = _config_update(caller_id, ai_disclosure)
         try:
             return _parse_session_config(self._http.put(_config_path(session_id), body))
         except PineAIError as exc:

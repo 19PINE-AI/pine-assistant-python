@@ -122,7 +122,7 @@ user = await partner_client.platform.managed_users.update(
 | `sessions.list(...)` | `SessionListResponse` |
 | `sessions.get(session_id)` | `SessionInfo` |
 | `sessions.get_config(session_id)` | `SessionConfig` |
-| `sessions.update_config(session_id, *, caller_id=None, ai_disclosure=None, recording_disclosure=None)` | `SessionConfig` after the change |
+| `sessions.update_config(session_id, *, caller_id=None, ai_disclosure=None)` | `SessionConfig` after the change |
 | `sessions.send_message(session_id, content, ..., client_now_date=None)` | `SessionMessageStatus` |
 | `sessions.history(session_id, *, limit=30, before_message_id=None)` | `SessionHistoryPage`: one page of stored messages, newest first |
 | `sessions.start_task(session_id)` | `dict` |
@@ -175,46 +175,43 @@ await client.sessions.update_config(session["id"], caller_id="platform")
 await client.sessions.send_message(session["id"], "Call the clinic to book a visit")
 ```
 
-### Call disclosures
+### AI disclosure
 
-Two settings control what the assistant says on a call:
+`ai_disclosure` controls whether the assistant says it is an AI on a call:
 
-| Setting | Values |
+| Value | Meaning |
 |---|---|
-| `ai_disclosure` | `"proactive"` (introduce itself as AI), `"on_request"` (disclose that identity when asked), `"disabled"` |
-| `recording_disclosure` | `"proactive"` (announce that the call is recorded), `"disabled"` |
+| `"proactive"` | Introduce itself as AI. |
+| `"on_request"` | Disclose that identity when asked. |
+| `"disabled"` | Do not disclose it. |
 
-Managed-user sessions default to `"proactive"` for both. Pine test accounts
-default to `"disabled"` for both. The server decides which modes a user may
-set: it rejects `ai_disclosure="disabled"` for managed users with 400
-`invalid_request`.
+Managed-user sessions default to `"proactive"`. Pine test accounts default to
+`"disabled"`. The server decides which modes a user may set: it rejects
+`ai_disclosure="disabled"` for managed users with 400 `invalid_request`.
 
-These settings require a server with session disclosure support. An older
-server may silently accept them for test accounts without applying them.
+This setting requires a server with session disclosure support. An older
+server may silently accept it for test accounts without applying it.
 
 ```python
 session = await client.sessions.create()
 config = await client.sessions.update_config(
-    session["id"], ai_disclosure="on_request", recording_disclosure="disabled",
+    session["id"], ai_disclosure="on_request",
 )
 await client.sessions.send_message(session["id"], "Call the clinic to book a visit")
 ```
 
-Both `AsyncPineAI` and `PineAI` support these settings. `update_config()`
+Both `AsyncPineAI` and `PineAI` support this setting. `update_config()`
 changes only the settings given; `None` leaves a setting unchanged and is not
 sent. A call with no setting to change, a non-string or an unknown mode raises
-`ValueError` before any request is sent. Setting
-`recording_disclosure="disabled"` turns off the spoken recording notice, not
-recording.
+`ValueError` before any request is sent.
 Changes affect subsequent calls; calls already placed keep their settings.
 The same 503 and 500 behavior described above applies.
 
-`sessions.get_config()` returns the effective disclosure values from the server.
-Both disclosure fields are `None` when an older server omits them. They are
-read as plain strings, so a mode added later by the server still parses. The
-SDK does not choose product defaults locally. `AIDisclosure` and
-`RecordingDisclosure`, exported from `pine_assistant`, type the modes accepted
-by `update_config()`.
+`sessions.get_config()` returns the effective `ai_disclosure` from the server.
+It is `None` when an older server omits it. It is read as a plain string, so a
+mode added later by the server still parses. The SDK does not choose product
+defaults locally. `AIDisclosure`, exported from `pine_assistant`, types the
+modes accepted by `update_config()`.
 
 ### The user's time
 
